@@ -5,3 +5,4 @@ namespace: crossplane-system
 
 resources:
   - helmapp
+  - s3irsa

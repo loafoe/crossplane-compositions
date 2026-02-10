@@ -7,3 +7,4 @@ resources:
   - helmapp
   - s3irsa
   - postgres
+  - mysql

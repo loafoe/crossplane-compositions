@@ -1,4 +1,4 @@
-.PHONY: test validate render render-check test-snapshots-no-storageclass clean help
+.PHONY: test validate render render-check test-snapshots-no-storageclass test-restore-from-volumesnapshot clean help
 
 # Default target
 .DEFAULT_GOAL := help
@@ -15,7 +15,7 @@ help: ## Show this help message
 	@echo 'Available targets:'
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-15s %s\n", $$1, $$2}'
 
-test: validate render render-check test-snapshots-no-storageclass ## Run all tests (validate + render + snapshot assertions)
+test: validate render render-check test-snapshots-no-storageclass test-restore-from-volumesnapshot ## Run all tests (validate + render + snapshot assertions)
 	@echo "✅ All postgres tests passed!"
 
 validate: ## Validate the composition and XRD using crossplane beta validate
@@ -79,6 +79,22 @@ test-snapshots-no-storageclass: ## Assert that enableSnapshots=true without stor
 	echo "$$OUTPUT" | grep -q "storageClassName is required when enableSnapshots is true" \
 		|| { echo "❌ Expected validation error not found. Output was:"; echo "$$OUTPUT"; exit 1; }; \
 	echo "✅ Negative test passed (missing storageClassName correctly rejected)!"
+
+test-restore-from-volumesnapshot: ## Assert rendered output of cnpg-restore-from-volumesnapshot uses volumeSnapshots bootstrap
+	@echo "🔍 Checking rendered output for VolumeSnapshot restore bootstrap..."
+	@OUTPUT=$$(crossplane render \
+		$(BASE_DIR)examples/cnpg-restore-from-volumesnapshot.yaml \
+		$(BASE_DIR)postgres-composition-cnpg.yaml \
+		$(BASE_DIR)functions-only.yaml \
+		--xrd=$(BASE_DIR)postgres-xrd.yaml \
+		--required-resources=$(BASE_DIR)test-environment-config.yaml 2>&1) || { echo "❌ Render failed"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "volumeSnapshots:" \
+		|| { echo "❌ Expected 'volumeSnapshots:' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "apiGroup: snapshot.storage.k8s.io" \
+		|| { echo "❌ Expected 'apiGroup: snapshot.storage.k8s.io' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "myapp-local-snapshots-20240101" \
+		|| { echo "❌ Expected snapshot name not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "✅ VolumeSnapshot restore render-check passed!"
 
 clean: ## Clean up any generated files
 	@echo "🧹 Cleaning up postgres test artifacts..."

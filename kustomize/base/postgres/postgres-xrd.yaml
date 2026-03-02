@@ -141,7 +141,12 @@ spec:
                     properties:
                       sourceIdentifier:
                         type: string
-                        description: "The identifier of the source to restore from. AWS: DB Snapshot Identifier. CNPG: Backup Object Name."
+                        description: "The identifier of the source to restore from. AWS: DB Snapshot Identifier. CNPG backup: Backup Object Name. CNPG volumeSnapshot: VolumeSnapshot Object Name."
+                      method:
+                        type: string
+                        enum: ["backup", "volumeSnapshot"]
+                        default: "backup"
+                        description: "CNPG only. Restore method: 'backup' restores from a CNPG Backup object, 'volumeSnapshot' restores from a VolumeSnapshot object."
                     required:
                     - sourceIdentifier
                   

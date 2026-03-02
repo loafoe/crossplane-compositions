@@ -5,7 +5,7 @@ metadata:
   namespace: crossplane-system
   labels:
     provider: cnpg
-    revision: "48"
+    revision: "49"
 spec:
   # Reference to the XRD
   compositeTypeRef:
@@ -34,8 +34,10 @@ spec:
           
           {{- /* Restore Configuration */ -}}
           {{- $restoreIdentifier := "" }}
+          {{- $restoreMethod := "backup" }}
           {{- if $xr.spec.parameters.restore }}
             {{- $restoreIdentifier = $xr.spec.parameters.restore.sourceIdentifier }}
+            {{- $restoreMethod = $xr.spec.parameters.restore.method | default "backup" }}
           {{- end }}
           
           {{- /* Identifier logic */ -}}
@@ -123,8 +125,16 @@ spec:
             bootstrap:
               {{- if $restoreIdentifier }}
               recovery:
+                {{- if eq $restoreMethod "volumeSnapshot" }}
+                volumeSnapshots:
+                  storage:
+                    name: {{ $restoreIdentifier }}
+                    kind: VolumeSnapshot
+                    apiGroup: snapshot.storage.k8s.io
+                {{- else }}
                 backup:
                   name: {{ $restoreIdentifier }}
+                {{- end }}
               {{- else }}
               initdb:
                 database: {{ $databaseName | default "app" }}

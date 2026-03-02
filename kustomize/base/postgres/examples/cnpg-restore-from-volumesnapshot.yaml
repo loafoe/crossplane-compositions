@@ -1,0 +1,25 @@
+apiVersion: dip.io/v1alpha1
+kind: Postgres
+metadata:
+  name: myapp-local-db-restored
+  namespace: default
+spec:
+  writeConnectionSecretToRef:
+    name: myapp-local-db-restored-connection
+    namespace: default
+  crossplane:
+    compositionSelector:
+      matchLabels:
+        provider: cnpg
+  parameters:
+    size: small
+    masterUsername: "postgres"
+    identifier: myapp-local-restored
+    databaseName: app
+    engineVersion: "18.1"
+    allocatedStorage: 5
+    multiAz: false
+    storageClassName: "csi-storageclass"
+    restore:
+      method: volumeSnapshot
+      sourceIdentifier: myapp-local-snapshots-20240101

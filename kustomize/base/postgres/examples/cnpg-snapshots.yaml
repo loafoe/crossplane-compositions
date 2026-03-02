@@ -1,0 +1,24 @@
+apiVersion: dip.io/v1alpha1
+kind: Postgres
+metadata:
+  name: myapp-local-db-snapshots
+  namespace: default
+spec:
+  writeConnectionSecretToRef:
+    name: myapp-local-db-snapshots-connection
+    namespace: default
+  crossplane:
+    compositionSelector:
+      matchLabels:
+        provider: cnpg
+  parameters:
+    size: small
+    masterUsername: "postgres"
+    identifier: myapp-local-snapshots
+    databaseName: app
+    engineVersion: "18.1"
+    allocatedStorage: 5
+    multiAz: false
+    enableSnapshots: true
+    snapshotClassName: "csi-snapclass"
+    storageClassName: "csi-storageclass"

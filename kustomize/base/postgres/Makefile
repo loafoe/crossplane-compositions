@@ -1,4 +1,4 @@
-.PHONY: test validate render render-check test-snapshots-no-storageclass test-restore-from-volumesnapshot clean help
+.PHONY: test validate render render-check test-restore-from-volumesnapshot clean help
 
 # Default target
 .DEFAULT_GOAL := help
@@ -15,7 +15,7 @@ help: ## Show this help message
 	@echo 'Available targets:'
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-15s %s\n", $$1, $$2}'
 
-test: validate render render-check test-snapshots-no-storageclass test-restore-from-volumesnapshot ## Run all tests (validate + render + snapshot assertions)
+test: validate render render-check test-restore-from-volumesnapshot ## Run all tests (validate + render + snapshot assertions)
 	@echo "✅ All postgres tests passed!"
 
 validate: ## Validate the composition and XRD using crossplane beta validate
@@ -62,23 +62,6 @@ render-check: ## Assert rendered output of cnpg-snapshots example contains stora
 	echo "$$OUTPUT" | grep -q "className: csi-snapclass" \
 		|| { echo "❌ Expected 'className: csi-snapclass' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
 	echo "✅ Snapshot render-check passed!"
-
-test-snapshots-no-storageclass: ## Assert that enableSnapshots=true without storageClassName fails with a clear error
-	@echo "🔍 Testing that missing storageClassName with enableSnapshots=true produces an error..."
-	@TMPFILE=$$(mktemp /tmp/cnpg-test-XXXXXX.yaml); \
-	cat $(BASE_DIR)examples/cnpg-snapshots.yaml \
-		| grep -v "storageClassName:" > $$TMPFILE; \
-	OUTPUT=$$(crossplane render \
-		$$TMPFILE \
-		$(BASE_DIR)postgres-composition-cnpg.yaml \
-		$(BASE_DIR)functions-only.yaml \
-		--xrd=$(BASE_DIR)postgres-xrd.yaml \
-		--required-resources=$(BASE_DIR)test-environment-config.yaml 2>&1); \
-	EXIT=$$?; \
-	rm -f $$TMPFILE; \
-	echo "$$OUTPUT" | grep -q "storageClassName is required when enableSnapshots is true" \
-		|| { echo "❌ Expected validation error not found. Output was:"; echo "$$OUTPUT"; exit 1; }; \
-	echo "✅ Negative test passed (missing storageClassName correctly rejected)!"
 
 test-restore-from-volumesnapshot: ## Assert rendered output of cnpg-restore-from-volumesnapshot uses volumeSnapshots bootstrap
 	@echo "🔍 Checking rendered output for VolumeSnapshot restore bootstrap..."

@@ -51,10 +51,6 @@ spec:
           {{- $snapshotClassName := $xr.spec.parameters.snapshotClassName | default "default" }}
           {{- $storageClassName := $xr.spec.parameters.storageClassName | default "" }}
 
-          {{- if and $enableSnapshots (eq $storageClassName "") }}
-            {{- fail "storageClassName is required when enableSnapshots is true" }}
-          {{- end }}
-
           {{- $dbMasterUsername := $xr.spec.parameters.masterUsername | default "" }}
           
           {{- /* Password Handling */ -}}

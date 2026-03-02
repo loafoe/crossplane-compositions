@@ -398,6 +398,121 @@ spec:
     kind: ProviderConfig
 ```
 
+## Backup and Restore (CNPG)
+
+CloudNativePG supports VolumeSnapshot-based backups for fast, consistent point-in-time recovery.
+
+### Enabling Scheduled Snapshots
+
+Enable daily VolumeSnapshot backups by setting `enableSnapshots: true`:
+
+```yaml
+apiVersion: dip.io/v1alpha1
+kind: Postgres
+metadata:
+  name: myapp-db
+  namespace: myapp
+spec:
+  crossplane:
+    compositionSelector:
+      matchLabels:
+        provider: cnpg
+  parameters:
+    identifier: myapp-db
+    masterUsername: myapp
+    databaseName: myapp
+    engineVersion: "18.1"
+    size: small
+    enableSnapshots: true           # Enables daily snapshots at midnight
+    snapshotClassName: default      # VolumeSnapshotClass to use
+  writeConnectionSecretToRef:
+    name: myapp-db-connection
+```
+
+This creates a `ScheduledBackup` resource that runs daily at midnight using the `volumeSnapshot` method.
+
+### Creating On-Demand Backups
+
+To create an immediate backup, apply a CNPG `Backup` resource directly:
+
+```yaml
+apiVersion: postgresql.cnpg.io/v1
+kind: Backup
+metadata:
+  name: myapp-db-backup-manual
+  namespace: myapp
+spec:
+  cluster:
+    name: myapp-db              # The CNPG cluster name (same as identifier)
+  method: volumeSnapshot
+```
+
+Monitor backup progress:
+
+```bash
+# Check backup status
+kubectl get backup myapp-db-backup-manual -n myapp
+
+# Wait for completion
+kubectl wait backup myapp-db-backup-manual -n myapp \
+  --for=jsonpath='{.status.phase}'=completed --timeout=120s
+
+# Verify VolumeSnapshot was created
+kubectl get volumesnapshots -n myapp
+```
+
+### Restoring from a VolumeSnapshot
+
+To restore a database from a VolumeSnapshot, create a new Postgres resource with the `restore` configuration:
+
+```yaml
+apiVersion: dip.io/v1alpha1
+kind: Postgres
+metadata:
+  name: myapp-db-restored
+  namespace: myapp
+spec:
+  crossplane:
+    compositionSelector:
+      matchLabels:
+        provider: cnpg
+  parameters:
+    identifier: myapp-db-restored
+    masterUsername: myapp
+    databaseName: myapp
+    engineVersion: "18.1"
+    size: small
+    snapshotClassName: default
+    restore:
+      sourceIdentifier: myapp-db-backup-manual   # Name of the VolumeSnapshot
+      method: volumeSnapshot
+  writeConnectionSecretToRef:
+    name: myapp-db-restored-connection
+```
+
+The new cluster will bootstrap by:
+1. Creating a PVC from the VolumeSnapshot
+2. Starting PostgreSQL recovery from the snapshot
+3. Replaying WAL to reach consistency
+4. Bringing up replica instances
+
+### Restore Configuration Options
+
+| Parameter | Required | Default | Description |
+|-----------|----------|---------|-------------|
+| `restore.sourceIdentifier` | Yes | - | Name of the VolumeSnapshot or Backup object |
+| `restore.method` | No | `backup` | Restore method: `volumeSnapshot` or `backup` |
+
+### Listing Available Snapshots
+
+```bash
+# List all VolumeSnapshots in a namespace
+kubectl get volumesnapshots -n myapp
+
+# List CNPG backups
+kubectl get backups.postgresql.cnpg.io -n myapp
+```
+
 ## Security Best Practices
 
 ### For All Databases

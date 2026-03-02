@@ -155,6 +155,10 @@ spec:
                     type: string
                     default: "default"
                     description: "VolumeSnapshotClass to use for snapshots (CNPG only)."
+                  
+                  storageClassName:
+                    type: string
+                    description: "StorageClass to use for CNPG PVC provisioning. Required for VolumeSnapshot support (must be backed by a CSI driver that supports snapshots)."
                 
                 required:
                 - masterUsername

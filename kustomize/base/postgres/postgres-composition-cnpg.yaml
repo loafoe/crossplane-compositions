@@ -5,7 +5,7 @@ metadata:
   namespace: crossplane-system
   labels:
     provider: cnpg
-    revision: "47"
+    revision: "48"
 spec:
   # Reference to the XRD
   compositeTypeRef:
@@ -47,7 +47,11 @@ spec:
           {{- $databaseName := $xr.spec.parameters.databaseName | default "" }}
           {{- $enableSnapshots := $xr.spec.parameters.enableSnapshots | default false }}
           {{- $snapshotClassName := $xr.spec.parameters.snapshotClassName | default "default" }}
+          {{- $storageClassName := $xr.spec.parameters.storageClassName | default "" }}
 
+          {{- if and $enableSnapshots (eq $storageClassName "") }}
+            {{- fail "storageClassName is required when enableSnapshots is true" }}
+          {{- end }}
 
           {{- $dbMasterUsername := $xr.spec.parameters.masterUsername | default "" }}
           
@@ -134,6 +138,9 @@ spec:
             # Storage configuration
             storage:
               size: {{ $dbAllocatedStorage }}Gi
+              {{- if $storageClassName }}
+              storageClass: {{ $storageClassName }}
+              {{- end }}
             
             # Resource Requirements
             resources:
@@ -144,11 +151,11 @@ spec:
                 memory: {{ $cnpgMemLim }}
                 cpu: {{ $cnpgCpuLim }}
 
-             {{- if $enableSnapshots }}
-             backup:
+            {{- if $enableSnapshots }}
+            backup:
               volumeSnapshot:
                 className: {{ $snapshotClassName }}
-             {{- end }}
+            {{- end }}
           
           {{- /* Password Secret - Always created (stub if user provided) */ -}}
           {{- $pwSecretName := printf "%s-password" $name }}

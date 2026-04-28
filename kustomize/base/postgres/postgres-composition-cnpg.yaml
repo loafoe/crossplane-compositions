@@ -5,7 +5,7 @@ metadata:
   namespace: crossplane-system
   labels:
     provider: cnpg
-    revision: "49"
+    revision: "50"
 spec:
   # Reference to the XRD
   compositeTypeRef:
@@ -51,6 +51,14 @@ spec:
           {{- $snapshotClassName := $xr.spec.parameters.snapshotClassName | default "default" }}
           {{- $storageClassName := $xr.spec.parameters.storageClassName | default "" }}
 
+          {{- /* VPA Configuration */ -}}
+          {{- $vpaEnabled := false }}
+          {{- $vpaUpdateMode := "Off" }}
+          {{- if $xr.spec.parameters.vpa }}
+            {{- $vpaEnabled = $xr.spec.parameters.vpa.enabled | default false }}
+            {{- $vpaUpdateMode = $xr.spec.parameters.vpa.updateMode | default "Off" }}
+          {{- end }}
+
           {{- $dbMasterUsername := $xr.spec.parameters.masterUsername | default "" }}
           
           {{- /* Password Handling */ -}}
@@ -87,7 +95,12 @@ spec:
           {{- $cnpgCpuLim := "1000m" }}
           {{- $cnpgMemReq := "512Mi" }}
           {{- $cnpgMemLim := "1Gi" }}
-          {{- if eq $size "medium" }}
+          {{- if eq $size "xsmall" }}
+            {{- $cnpgCpuReq = "100m" }}
+            {{- $cnpgCpuLim = "500m" }}
+            {{- $cnpgMemReq = "128Mi" }}
+            {{- $cnpgMemLim = "256Mi" }}
+          {{- else if eq $size "medium" }}
             {{- $cnpgCpuReq = "2" }}
             {{- $cnpgCpuLim = "2" }}
             {{- $cnpgMemReq = "4Gi" }}
@@ -246,6 +259,34 @@ spec:
             cluster:
               name: {{ $targetIdentifier }}
           {{- end }}
+
+          {{- if $vpaEnabled }}
+          ---
+          apiVersion: autoscaling.k8s.io/v1
+          kind: VerticalPodAutoscaler
+          metadata:
+            name: {{ $targetIdentifier }}-vpa
+            namespace: {{ $namespace }}
+            annotations:
+              gotemplating.fn.crossplane.io/composition-resource-name: vpa
+          spec:
+            targetRef:
+              apiVersion: postgresql.cnpg.io/v1
+              kind: Cluster
+              name: {{ $targetIdentifier }}
+            updatePolicy:
+              updateMode: {{ $vpaUpdateMode | quote }}
+            resourcePolicy:
+              containerPolicies:
+              - containerName: postgres
+                minAllowed:
+                  memory: 64Mi
+                  cpu: 50m
+                maxAllowed:
+                  memory: 8Gi
+                  cpu: 4
+                controlledResources: ["memory", "cpu"]
+          {{- end }}
   
   # Patch status fields
   - step: patch-and-transform
@@ -286,10 +327,7 @@ spec:
         - type: MatchString
           fieldPath: kind
           matchString: Secret
-                
-        # Secret Readiness (Always Ready)
 
-  
   # Auto-ready function
   - step: auto-ready
     functionRef:

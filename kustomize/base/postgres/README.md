@@ -6,7 +6,7 @@ This Crossplane v2 composition provides a complete solution for **PostgreSQL** d
 
 - ✅ **Namespace-scoped** composite resources (no claims required)
 - ✅ **Multi-Provider Support**: Switch between `aws` and `cnpg` backends
-- ✅ **T-Shirt Sizing**: Simple `small`, `medium`, `large` abstraction
+- ✅ **T-Shirt Sizing**: Simple `xsmall`, `small`, `medium`, `large` abstraction
 - ✅ **Create new AWS RDS/Aurora** instances with full configuration
 - ✅ **Deploy CloudNativePG Clusters** on Kubernetes
 - ✅ **Multi-AZ deployment** support (AWS Multi-AZ / CNPG Replicas)
@@ -14,6 +14,7 @@ This Crossplane v2 composition provides a complete solution for **PostgreSQL** d
 - ✅ **Encryption at rest** enforced by default
 - ✅ **Connection secret output** with endpoint, port, username and password
 - ✅ **Resource tagging** support
+- ✅ **VPA Support** (CNPG): Optional Vertical Pod Autoscaler for automatic resource right-sizing
 
 ## Prerequisites
 
@@ -216,16 +217,71 @@ spec:
 |-----------|----------|---------|-------------|
 | `identifier` | Yes | - | Name of the database resource |
 | `provider` | No | `aws` | Backend provider: `aws` or `cnpg` |
-| `size` | No | `small` | T-shirt size: `small`, `medium`, `large` |
+| `size` | No | `small` | T-shirt size: `xsmall`, `small`, `medium`, `large` |
 | `engineVersion` | Yes | - | PostgreSQL engine version (e.g., '18.1', '16.1') |
-| `allocatedStorage` | Yes | - | Storage in GB (minimum 20) |
+| `allocatedStorage` | Yes | - | Storage in GB (minimum 20 for AWS, 5 for CNPG) |
 | `storageType` | No | `gp3` | Storage type: gp2, gp3, io1 |
 | `masterUsername` | Yes | - | Master database username |
-| `masterPasswordSecretRef` | Yes | - | Reference to password secret |
+| `masterPasswordSecretRef` | No | - | Reference to password secret (auto-generated if not provided) |
 | `backupRetentionPeriod` | No | `7` | Backup retention days (0-35) |
 | `multiAz` | No | `false` | Enable Multi-AZ deployment |
+| `vpa.enabled` | No | `false` | Enable VPA for automatic resource right-sizing (CNPG only) |
+| `vpa.updateMode` | No | `Off` | VPA update mode: `Off`, `Initial`, or `Auto` |
 
 **Note:** VPC configuration (subnets and security groups) is automatically extracted from the `environmentConfig` resource. The composition uses the database subnet group and database security group defined in the environment configuration.
+
+### T-Shirt Sizing
+
+The `size` parameter provides a simple abstraction for resource allocation. Choose based on your workload requirements:
+
+| Size | CPU Request | CPU Limit | Memory Request | Memory Limit | Use Case |
+|------|-------------|-----------|----------------|--------------|----------|
+| `xsmall` | 100m | 500m | 128Mi | 256Mi | Low-traffic databases, dev/test, sidecars (Grafana DB, Dex DB) |
+| `small` | 500m | 1000m | 512Mi | 1Gi | Standard workloads, small applications |
+| `medium` | 2 | 2 | 4Gi | 4Gi | Medium traffic, production workloads |
+| `large` | 4 | 4 | 16Gi | 16Gi | High traffic, large datasets, analytics |
+
+**AWS RDS Mapping**: For AWS provider, sizes map to instance classes:
+- `small` → `db.t3.small`
+- `medium` → `db.t3.medium`
+- `large` → `db.m5.large`
+
+### Vertical Pod Autoscaler (VPA) Support
+
+For CNPG databases, you can enable VPA to automatically right-size your database resources based on actual usage:
+
+```yaml
+apiVersion: dip.io/v1alpha1
+kind: Postgres
+metadata:
+  name: myapp-db
+  namespace: default
+spec:
+  crossplane:
+    compositionSelector:
+      matchLabels:
+        provider: cnpg
+  parameters:
+    size: xsmall
+    masterUsername: postgres
+    identifier: myapp
+    vpa:
+      enabled: true
+      updateMode: "Off"  # Recommendations only
+```
+
+**Update Modes:**
+| Mode | Behavior |
+|------|----------|
+| `Off` | VPA provides recommendations only; no automatic changes |
+| `Initial` | VPA sets resources only when pods are created |
+| `Auto` | VPA automatically updates pod resources (may cause restarts) |
+
+**Recommendation:** Start with `updateMode: "Off"` to observe recommendations before enabling automatic updates. View recommendations with:
+
+```bash
+kubectl get vpa -n <namespace> -o custom-columns='NAME:.metadata.name,TARGET_MEM:.status.recommendation.containerRecommendations[0].target.memory,TARGET_CPU:.status.recommendation.containerRecommendations[0].target.cpu'
+```
 
 ## Connecting to the Database
 

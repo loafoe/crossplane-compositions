@@ -49,9 +49,9 @@ spec:
                   # T-Shirt Sizing abstraction
                   size:
                     type: string
-                    enum: ["small", "medium", "large"]
+                    enum: ["xsmall", "small", "medium", "large"]
                     default: "small"
-                    description: "Instance sizing abstraction. small (1vCPU/2GB), medium (2vCPU/4GB), large (4vCPU/16GB). Overridden by instanceClass if set."
+                    description: "Instance sizing abstraction. xsmall (100m/256Mi), small (500m/1Gi), medium (2vCPU/4Gi), large (4vCPU/16Gi). Overridden by instanceClass if set."
 
                   # Identifier for creating new database
                   identifier:
@@ -164,11 +164,24 @@ spec:
                   storageClassName:
                     type: string
                     description: "StorageClass to use for CNPG PVC provisioning. Required for VolumeSnapshot support (must be backed by a CSI driver that supports snapshots)."
-                
+
+                  vpa:
+                    type: object
+                    description: "Vertical Pod Autoscaler configuration for automatic resource right-sizing."
+                    properties:
+                      enabled:
+                        type: boolean
+                        default: false
+                        description: "Enable VPA for this database cluster."
+                      updateMode:
+                        type: string
+                        enum: ["Off", "Initial", "Auto"]
+                        default: "Off"
+                        description: "VPA update mode. Off=recommendations only, Initial=set on pod creation, Auto=live updates."
+
                 required:
                 - masterUsername
-              
-              # Optional: Tags for created resources
+                            # Optional: Tags for created resources
               tags:
                 type: object
                 description: "Tags to apply to AWS resources"

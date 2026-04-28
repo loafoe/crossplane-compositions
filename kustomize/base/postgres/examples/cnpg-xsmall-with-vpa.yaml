@@ -1,0 +1,28 @@
+apiVersion: dip.io/v1alpha1
+kind: Postgres
+metadata:
+  name: myapp-lightweight-db
+  namespace: default
+spec:
+  writeConnectionSecretToRef:
+    name: myapp-lightweight-db-connection
+    namespace: default
+  crossplane:
+    compositionSelector:
+      matchLabels:
+        provider: cnpg
+  parameters:
+    # Use xsmall for low-traffic databases (128Mi request, 256Mi limit)
+    size: xsmall
+
+    # Standard configuration
+    masterUsername: "postgres"
+    identifier: myapp-lightweight
+    databaseName: app
+    engineVersion: "18.1"
+    allocatedStorage: 5
+
+    # Enable VPA in recommendation mode to track actual usage
+    vpa:
+      enabled: true
+      updateMode: "Off"  # Off=recommendations only, Initial=set on creation, Auto=live updates

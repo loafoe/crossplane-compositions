@@ -49,7 +49,7 @@ spec:
       inline:
         template: |
           {{- /* Define supported environment variables for substitution */ -}}
-          {{- $supportedEnvVars := list "resourcePrefix" "clusterFqdn" "accountId" "region" "partition" "oidcProvider" "oidcProviderArn" -}}
+          {{- $supportedEnvVars := list "resourcePrefix" "clusterFqdn" "customFqdn" "accountId" "region" "partition" "oidcProvider" "oidcProviderArn" -}}
           {{- $env := index .context "apiextensions.crossplane.io/environment" }}
           {{- /* Helper to apply variable substitution to a string */ -}}
           {{- define "substituteVars" -}}

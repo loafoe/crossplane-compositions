@@ -5,7 +5,7 @@ metadata:
   namespace: crossplane-system
   labels:
     provider: cnpg
-    revision: "50"
+    revision: "51"
 spec:
   # Reference to the XRD
   compositeTypeRef:
@@ -90,24 +90,20 @@ spec:
             {{- $secretName = $xr.spec.writeConnectionSecretToRef.name }}
           {{- end }}
           
-          {{- /* CNPG Resource Calculation */ -}}
-          {{- $cnpgCpuReq := "500m" }}
-          {{- $cnpgCpuLim := "1000m" }}
+          {{- /* CNPG Resource Calculation - CPU limits intentionally omitted */ -}}
+          {{- $cnpgCpuReq := "50m" }}
           {{- $cnpgMemReq := "512Mi" }}
           {{- $cnpgMemLim := "1Gi" }}
           {{- if eq $size "xsmall" }}
-            {{- $cnpgCpuReq = "100m" }}
-            {{- $cnpgCpuLim = "500m" }}
+            {{- $cnpgCpuReq = "25m" }}
             {{- $cnpgMemReq = "128Mi" }}
             {{- $cnpgMemLim = "256Mi" }}
           {{- else if eq $size "medium" }}
-            {{- $cnpgCpuReq = "2" }}
-            {{- $cnpgCpuLim = "2" }}
+            {{- $cnpgCpuReq = "250m" }}
             {{- $cnpgMemReq = "4Gi" }}
             {{- $cnpgMemLim = "4Gi" }}
           {{- else if eq $size "large" }}
-            {{- $cnpgCpuReq = "4" }}
-            {{- $cnpgCpuLim = "4" }}
+            {{- $cnpgCpuReq = "1" }}
             {{- $cnpgMemReq = "16Gi" }}
             {{- $cnpgMemLim = "16Gi" }}
           {{- end }}
@@ -161,14 +157,13 @@ spec:
               storageClass: {{ $storageClassName }}
               {{- end }}
             
-            # Resource Requirements
+            # Resource Requirements (no CPU limits - allows bursting)
             resources:
               requests:
                 memory: {{ $cnpgMemReq }}
                 cpu: {{ $cnpgCpuReq }}
               limits:
                 memory: {{ $cnpgMemLim }}
-                cpu: {{ $cnpgCpuLim }}
 
             {{- if $enableSnapshots }}
             backup:

@@ -5,7 +5,7 @@ metadata:
   namespace: crossplane-system
   labels:
     provider: cnpg
-    revision: "51"
+    revision: "52"
 spec:
   # Reference to the XRD
   compositeTypeRef:
@@ -92,19 +92,19 @@ spec:
           
           {{- /* CNPG Resource Calculation - CPU limits intentionally omitted */ -}}
           {{- $cnpgCpuReq := "50m" }}
-          {{- $cnpgMemReq := "512Mi" }}
+          {{- $cnpgMemReq := "128Mi" }}
           {{- $cnpgMemLim := "1Gi" }}
           {{- if eq $size "xsmall" }}
             {{- $cnpgCpuReq = "25m" }}
-            {{- $cnpgMemReq = "128Mi" }}
+            {{- $cnpgMemReq = "64Mi" }}
             {{- $cnpgMemLim = "256Mi" }}
           {{- else if eq $size "medium" }}
             {{- $cnpgCpuReq = "250m" }}
-            {{- $cnpgMemReq = "4Gi" }}
+            {{- $cnpgMemReq = "1Gi" }}
             {{- $cnpgMemLim = "4Gi" }}
           {{- else if eq $size "large" }}
             {{- $cnpgCpuReq = "1" }}
-            {{- $cnpgMemReq = "16Gi" }}
+            {{- $cnpgMemReq = "4Gi" }}
             {{- $cnpgMemLim = "16Gi" }}
           {{- end }}
           

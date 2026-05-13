@@ -5,7 +5,7 @@ metadata:
   namespace: crossplane-system
   labels:
     provider: cnpg
-    revision: "55"
+    revision: "57"
 spec:
   # Reference to the XRD
   compositeTypeRef:
@@ -107,6 +107,8 @@ spec:
             {{- $barmanSchedule = $xr.spec.parameters.barmanBackup.scheduleBaseBackup | default "0 0 0 * * *" }}
           {{- end }}
           {{- $barmanDestinationPath := printf "s3://%s/%s" $barmanBucketName $barmanBucketPrefix }}
+          {{- /* Skip barman backup config during recovery from barman - the destination is the recovery source */ -}}
+          {{- $skipBarmanBackup := and (eq $restoreMethod "barmanObjectStore") $barmanEnabled }}
 
           {{- $dbMasterUsername := $xr.spec.parameters.masterUsername | default "" }}
           
@@ -217,6 +219,7 @@ spec:
             externalClusters:
             - name: barmanBackupSource
               barmanObjectStore:
+                serverName: {{ $targetIdentifier }}
                 destinationPath: {{ $barmanDestinationPath }}
                 s3Credentials:
                   inheritFromIAMRole: true
@@ -241,9 +244,9 @@ spec:
               limits:
                 memory: {{ $cnpgMemLim }}
 
-            {{- if or $enableSnapshots $barmanEnabled }}
+            {{- if or $enableSnapshots (and $barmanEnabled (not $skipBarmanBackup)) }}
             backup:
-              {{- if $barmanEnabled }}
+              {{- if and $barmanEnabled (not $skipBarmanBackup) }}
               barmanObjectStore:
                 destinationPath: {{ $barmanDestinationPath }}
                 s3Credentials:
@@ -258,7 +261,7 @@ spec:
               {{- if $enableSnapshots }}
               volumeSnapshot:
                 className: {{ $snapshotClassName }}
-                {{- if $barmanEnabled }}
+                {{- if and $barmanEnabled (not $skipBarmanBackup) }}
                 online: true
                 onlineConfiguration:
                   immediateCheckpoint: false
@@ -352,7 +355,7 @@ spec:
               name: {{ $targetIdentifier }}
           {{- end }}
 
-          {{- if $barmanEnabled }}
+          {{- if and $barmanEnabled (not $skipBarmanBackup) }}
           ---
           apiVersion: postgresql.cnpg.io/v1
           kind: ScheduledBackup

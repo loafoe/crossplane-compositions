@@ -3,11 +3,18 @@ kind: EnvironmentConfig
 metadata:
   name: hsp-addons
   labels:
-    config: hsp-addons
+    config: dip-software
+    config-alt: hsp-addons
 data:
   accountId: "123456789012"
   region: "us-east-1"
+  resourcePrefix: "test-cluster"
   clusterName: "test-cluster"
+  bootstrap:
+    oidcProvider: "oidc.eks.us-east-1.amazonaws.com/id/EXAMPLE123456"
+    oidcProviderArn: "arn:aws:iam::123456789012:oidc-provider/oidc.eks.us-east-1.amazonaws.com/id/EXAMPLE123456"
+    awsRdsSubnetGroup: '{"id":"test-rds-subnet-group","name":"test-rds-subnet-group"}'
+    awsRdsSecurityGroups: '{"id":"sg-12345678"}'
   eks:
     oidcProvider: "oidc.eks.us-east-1.amazonaws.com/id/EXAMPLE123456"
     oidcProviderArn: "arn:aws:iam::123456789012:oidc-provider/oidc.eks.us-east-1.amazonaws.com/id/EXAMPLE123456"

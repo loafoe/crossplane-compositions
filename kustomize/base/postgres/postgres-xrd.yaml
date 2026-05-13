@@ -179,6 +179,36 @@ spec:
                         default: "Off"
                         description: "VPA update mode. Off=recommendations only, Initial=set on pod creation, Auto=live updates."
 
+                  barmanBackup:
+                    type: object
+                    description: "Barman object store backup configuration for continuous WAL archiving to S3. Enables point-in-time recovery and automatic restore on data loss."
+                    properties:
+                      enabled:
+                        type: boolean
+                        default: false
+                        description: "Enable continuous WAL archiving and base backups to S3 via barman-cloud."
+                      bucketName:
+                        type: string
+                        description: "S3 bucket name for backups. Defaults to ${resourcePrefix}-barman from environment config."
+                      bucketPrefix:
+                        type: string
+                        description: "Prefix path within the bucket. Defaults to ${namespace}/${clusterName}."
+                      retentionDays:
+                        type: integer
+                        default: 7
+                        minimum: 1
+                        maximum: 365
+                        description: "Number of days to retain backups and WAL files."
+                      compression:
+                        type: string
+                        enum: ["gzip", "bzip2", "snappy", "none"]
+                        default: "gzip"
+                        description: "Compression algorithm for WAL files and backups."
+                      scheduleBaseBackup:
+                        type: string
+                        default: "0 0 0 * * *"
+                        description: "Cron schedule for base backups (default: daily at midnight)."
+
                 required:
                 - masterUsername
                             # Optional: Tags for created resources

@@ -225,13 +225,11 @@ spec:
             # External cluster for barman recovery source
             externalClusters:
             - name: barmanBackupSource
-              barmanObjectStore:
-                serverName: {{ $targetIdentifier }}
-                destinationPath: {{ $barmanDestinationPath }}
-                s3Credentials:
-                  inheritFromIAMRole: true
-                wal:
-                  maxParallel: 4
+              plugin:
+                name: barman-cloud.cloudnative-pg.io
+                parameters:
+                  barmanObjectName: {{ $targetIdentifier }}-backup
+                  serverName: {{ $targetIdentifier }}
             {{- end }}
 
             enableSuperuserAccess: true

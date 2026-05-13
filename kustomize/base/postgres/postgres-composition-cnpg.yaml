@@ -5,7 +5,7 @@ metadata:
   namespace: crossplane-system
   labels:
     provider: cnpg
-    revision: "54"
+    revision: "55"
 spec:
   # Reference to the XRD
   compositeTypeRef:
@@ -61,9 +61,11 @@ spec:
           {{- /* Restore Configuration */ -}}
           {{- $restoreIdentifier := "" }}
           {{- $restoreMethod := "backup" }}
+          {{- $restoreTargetTime := "" }}
           {{- if $xr.spec.parameters.restore }}
-            {{- $restoreIdentifier = $xr.spec.parameters.restore.sourceIdentifier }}
+            {{- $restoreIdentifier = $xr.spec.parameters.restore.sourceIdentifier | default "" }}
             {{- $restoreMethod = $xr.spec.parameters.restore.method | default "backup" }}
+            {{- $restoreTargetTime = $xr.spec.parameters.restore.targetTime | default "" }}
           {{- end }}
           
           {{- /* Identifier logic */ -}}
@@ -183,7 +185,14 @@ spec:
 
             # Bootstrap configuration
             bootstrap:
-              {{- if $restoreIdentifier }}
+              {{- if eq $restoreMethod "barmanObjectStore" }}
+              recovery:
+                source: barmanBackupSource
+                {{- if $restoreTargetTime }}
+                recoveryTarget:
+                  targetTime: {{ $restoreTargetTime | quote }}
+                {{- end }}
+              {{- else if $restoreIdentifier }}
               recovery:
                 {{- if eq $restoreMethod "volumeSnapshot" }}
                 volumeSnapshots:
@@ -202,6 +211,18 @@ spec:
                 secret:
                   name: {{ $dbMasterPasswordSecret.name }}
               {{- end }}
+
+            {{- if eq $restoreMethod "barmanObjectStore" }}
+            # External cluster for barman recovery source
+            externalClusters:
+            - name: barmanBackupSource
+              barmanObjectStore:
+                destinationPath: {{ $barmanDestinationPath }}
+                s3Credentials:
+                  inheritFromIAMRole: true
+                wal:
+                  maxParallel: 4
+            {{- end }}
 
             enableSuperuserAccess: true
 

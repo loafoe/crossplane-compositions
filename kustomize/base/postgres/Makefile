@@ -1,4 +1,4 @@
-.PHONY: test validate render render-check test-restore-from-volumesnapshot test-barman-backup clean help
+.PHONY: test validate render render-check test-restore-from-volumesnapshot test-barman-backup test-barman-restore clean help
 
 # Default target
 .DEFAULT_GOAL := help
@@ -15,7 +15,7 @@ help: ## Show this help message
 	@echo 'Available targets:'
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-15s %s\n", $$1, $$2}'
 
-test: validate render render-check test-restore-from-volumesnapshot test-barman-backup ## Run all tests (validate + render + snapshot assertions)
+test: validate render render-check test-restore-from-volumesnapshot test-barman-backup test-barman-restore ## Run all tests (validate + render + snapshot assertions)
 	@echo "✅ All postgres tests passed!"
 
 validate: ## Validate the composition and XRD using crossplane beta validate
@@ -114,6 +114,26 @@ test-barman-backup: ## Assert rendered output of cnpg-barman-backup contains bar
 	echo "$$OUTPUT" | grep -q "compression: gzip" \
 		|| { echo "❌ Expected 'compression: gzip' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
 	echo "✅ Barman backup render-check passed!"
+
+test-barman-restore: ## Assert rendered output of cnpg-barman-restore contains externalClusters and recovery bootstrap
+	@echo "🔍 Checking rendered output for Barman restore configuration..."
+	@OUTPUT=$$(crossplane render \
+		$(BASE_DIR)examples/cnpg-barman-restore.yaml \
+		$(BASE_DIR)postgres-composition-cnpg.yaml \
+		$(BASE_DIR)functions-only.yaml \
+		--xrd=$(BASE_DIR)postgres-xrd.yaml \
+		--required-resources=$(BASE_DIR)test-environment-config.yaml 2>&1) || { echo "❌ Render failed"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "externalClusters:" \
+		|| { echo "❌ Expected 'externalClusters:' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "name: barmanBackupSource" \
+		|| { echo "❌ Expected 'name: barmanBackupSource' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "source: barmanBackupSource" \
+		|| { echo "❌ Expected 'source: barmanBackupSource' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "destinationPath: s3://my-barman-bucket/myapp/restored-from-barman" \
+		|| { echo "❌ Expected S3 destination path not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "maxParallel: 4" \
+		|| { echo "❌ Expected 'maxParallel: 4' for WAL recovery not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "✅ Barman restore render-check passed!"
 
 clean: ## Clean up any generated files
 	@echo "🧹 Cleaning up postgres test artifacts..."

@@ -1,0 +1,24 @@
+apiVersion: dip.io/v1alpha1
+kind: Postgres
+metadata:
+  name: restored-pitr
+  namespace: myapp
+spec:
+  compositionSelector:
+    matchLabels:
+      provider: cnpg
+  parameters:
+    identifier: restored-pitr
+    size: small
+    databaseName: myapp
+    masterUsername: myapp
+    allocatedStorage: 20
+    barmanBackup:
+      enabled: true
+      bucketName: my-barman-bucket
+      bucketPrefix: myapp/restored-pitr
+    restore:
+      method: barmanObjectStore
+      targetTime: "2024-01-15T10:30:00Z"
+  writeConnectionSecretToRef:
+    name: myapp-pitr-connection

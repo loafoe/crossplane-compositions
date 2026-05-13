@@ -18,3 +18,10 @@ rules:
   - poolers/status
   verbs:
   - "*"
+- apiGroups:
+  - barmancloud.cnpg.io
+  resources:
+  - objectstores
+  - objectstores/status
+  verbs:
+  - "*"

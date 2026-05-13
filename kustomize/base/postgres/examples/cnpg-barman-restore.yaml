@@ -1,0 +1,20 @@
+apiVersion: dip.io/v1alpha1
+kind: Postgres
+metadata:
+  name: restored-from-barman
+  namespace: myapp
+spec:
+  parameters:
+    identifier: restored-from-barman
+    size: small
+    databaseName: myapp
+    masterUsername: myapp
+    allocatedStorage: 20
+    barmanBackup:
+      enabled: true
+      bucketName: my-barman-bucket
+      bucketPrefix: myapp/restored-from-barman
+    restore:
+      method: barmanObjectStore
+  writeConnectionSecretToRef:
+    name: myapp-db-connection

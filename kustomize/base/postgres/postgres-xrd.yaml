@@ -141,14 +141,15 @@ spec:
                     properties:
                       sourceIdentifier:
                         type: string
-                        description: "The identifier of the source to restore from. AWS: DB Snapshot Identifier. CNPG backup: Backup Object Name. CNPG volumeSnapshot: VolumeSnapshot Object Name."
+                        description: "The identifier of the source to restore from. AWS: DB Snapshot Identifier. CNPG backup: Backup Object Name. CNPG volumeSnapshot: VolumeSnapshot Object Name. Not required for barmanObjectStore method."
                       method:
                         type: string
-                        enum: ["backup", "volumeSnapshot"]
+                        enum: ["backup", "volumeSnapshot", "barmanObjectStore"]
                         default: "backup"
-                        description: "CNPG only. Restore method: 'backup' restores from a CNPG Backup object, 'volumeSnapshot' restores from a VolumeSnapshot object."
-                    required:
-                    - sourceIdentifier
+                        description: "CNPG restore method: 'backup' restores from a CNPG Backup object, 'volumeSnapshot' restores from a VolumeSnapshot object, 'barmanObjectStore' restores from S3 barman backup (uses barmanBackup config for bucket location)."
+                      targetTime:
+                        type: string
+                        description: "Point-in-time recovery target (barmanObjectStore only). ISO 8601 format, e.g., '2024-01-15T10:30:00Z'. If omitted, recovers to latest available WAL."
                   
                   # Snapshot configuration
                   enableSnapshots:

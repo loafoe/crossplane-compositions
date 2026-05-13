@@ -185,6 +185,13 @@ spec:
                   eks.amazonaws.com/role-arn: arn:aws:iam::{{ $awsAccountId }}:role/{{ $namespace }}-{{ $targetIdentifier }}-cnpg-backup
             {{- end }}
 
+            {{- if and $barmanEnabled (not $skipBarmanBackup) }}
+            plugins:
+              - name: barman-cloud.cloudnative-pg.io
+                parameters:
+                  barmanObjectName: {{ $targetIdentifier }}-backup
+            {{- end }}
+
             # Bootstrap configuration
             bootstrap:
               {{- if eq $restoreMethod "barmanObjectStore" }}
@@ -244,21 +251,8 @@ spec:
               limits:
                 memory: {{ $cnpgMemLim }}
 
-            {{- if or $enableSnapshots (and $barmanEnabled (not $skipBarmanBackup)) }}
+            {{- if $enableSnapshots }}
             backup:
-              {{- if and $barmanEnabled (not $skipBarmanBackup) }}
-              barmanObjectStore:
-                destinationPath: {{ $barmanDestinationPath }}
-                s3Credentials:
-                  inheritFromIAMRole: true
-                wal:
-                  compression: {{ $barmanCompression }}
-                  maxParallel: 2
-                data:
-                  compression: {{ $barmanCompression }}
-              retentionPolicy: "{{ $barmanRetentionDays }}d"
-              {{- end }}
-              {{- if $enableSnapshots }}
               volumeSnapshot:
                 className: {{ $snapshotClassName }}
                 {{- if and $barmanEnabled (not $skipBarmanBackup) }}
@@ -267,7 +261,6 @@ spec:
                   immediateCheckpoint: false
                   waitForArchive: true
                 {{- end }}
-              {{- end }}
               target: prefer-standby
             {{- end }}
           

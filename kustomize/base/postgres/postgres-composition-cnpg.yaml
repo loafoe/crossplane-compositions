@@ -359,7 +359,11 @@ spec:
               gotemplating.fn.crossplane.io/composition-resource-name: barman-scheduled-backup
           spec:
             schedule: {{ $barmanSchedule | quote }}
-            method: barmanObjectStore
+            method: plugin
+            pluginConfiguration:
+              name: barman-cloud.cloudnative-pg.io
+              parameters:
+                barmanObjectName: {{ $targetIdentifier }}-backup
             backupOwnerReference: self
             cluster:
               name: {{ $targetIdentifier }}

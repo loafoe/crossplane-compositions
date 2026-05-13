@@ -400,9 +400,216 @@ spec:
 
 ## Backup and Restore (CNPG)
 
-CloudNativePG supports VolumeSnapshot-based backups for fast, consistent point-in-time recovery.
+CloudNativePG supports two backup methods:
+1. **VolumeSnapshot**: Fast, storage-level snapshots for quick recovery
+2. **Barman Object Store (S3)**: Continuous WAL archiving for point-in-time recovery
 
-### Enabling Scheduled Snapshots
+### Barman Backup to S3 (Recommended for Production)
+
+Barman provides continuous WAL archiving to S3, enabling point-in-time recovery (PITR) and protection against data loss from node failures.
+
+#### Enabling Barman Backup
+
+```yaml
+apiVersion: dip.io/v1alpha1
+kind: Postgres
+metadata:
+  name: myapp-db
+  namespace: myapp
+spec:
+  crossplane:
+    compositionSelector:
+      matchLabels:
+        provider: cnpg
+  parameters:
+    identifier: myapp-db
+    masterUsername: myapp
+    databaseName: myapp
+    size: small
+    barmanBackup:
+      enabled: true
+      retentionDays: 7           # How long to keep backups
+      compression: gzip          # gzip, bzip2, snappy, or none
+      # bucketName: custom-bucket  # Optional: defaults to ${resourcePrefix}-barman
+      # bucketPrefix: custom/path  # Optional: defaults to ${namespace}/${identifier}
+  writeConnectionSecretToRef:
+    name: myapp-db-connection
+```
+
+This automatically:
+1. Creates an IAM Role with S3 access via IRSA
+2. Configures continuous WAL archiving to S3
+3. Creates a `ScheduledBackup` for daily base backups at midnight
+
+#### Verifying Barman Backup is Working
+
+```bash
+# Check continuous archiving status
+kubectl get cluster myapp-db -n myapp -o jsonpath='{.status.conditions}' | jq '.[] | select(.type=="ContinuousArchiving")'
+
+# Check WAL files in S3
+aws s3 ls s3://${BUCKET}/${NAMESPACE}/${IDENTIFIER}/${IDENTIFIER}/wals/ --recursive
+
+# Check base backups
+aws s3 ls s3://${BUCKET}/${NAMESPACE}/${IDENTIFIER}/${IDENTIFIER}/base/
+
+# List available backups from barman
+kubectl exec -n myapp myapp-db-1 -- barman-cloud-backup-list \
+  --cloud-provider aws-s3 \
+  s3://${BUCKET}/${NAMESPACE}/${IDENTIFIER} \
+  ${IDENTIFIER}
+```
+
+#### Creating On-Demand Barman Backup
+
+```yaml
+apiVersion: postgresql.cnpg.io/v1
+kind: Backup
+metadata:
+  name: myapp-db-barman-manual
+  namespace: myapp
+spec:
+  cluster:
+    name: myapp-db
+  method: barmanObjectStore
+```
+
+### Restoring from Barman Backup (S3)
+
+To restore a database from Barman S3 backup (e.g., after data loss or for disaster recovery):
+
+#### Step 1: Enable Restore Mode
+
+Update your Postgres resource to enable barman restore:
+
+```yaml
+apiVersion: dip.io/v1alpha1
+kind: Postgres
+metadata:
+  name: myapp-db
+  namespace: myapp
+spec:
+  crossplane:
+    compositionSelector:
+      matchLabels:
+        provider: cnpg
+  parameters:
+    identifier: myapp-db
+    masterUsername: myapp
+    databaseName: myapp
+    size: small
+    barmanBackup:
+      enabled: true
+      retentionDays: 7
+    restore:
+      method: barmanObjectStore
+      # targetTime: "2024-01-15T10:30:00Z"  # Optional: point-in-time recovery
+  writeConnectionSecretToRef:
+    name: myapp-db-connection
+```
+
+#### Step 2: Delete and Recreate the Postgres Resource
+
+```bash
+# Delete the postgres resource (this will delete the CNPG cluster)
+kubectl delete postgres myapp-db -n myapp
+
+# Wait for cleanup
+kubectl wait --for=delete cluster/myapp-db -n myapp --timeout=120s
+
+# Apply the postgres resource with restore config
+kubectl apply -f myapp-db-restore.yaml
+```
+
+#### Step 3: Monitor Recovery Progress
+
+```bash
+# Watch recovery pods
+kubectl get pods -n myapp -l cnpg.io/cluster=myapp-db -w
+
+# Check recovery logs
+kubectl logs -n myapp -l cnpg.io/cluster=myapp-db -c full-recovery --tail=50
+
+# Wait for cluster to be healthy
+kubectl wait cluster myapp-db -n myapp \
+  --for=jsonpath='{.status.phase}'='Cluster in healthy state' --timeout=600s
+```
+
+#### Step 4: Fix Password (if needed)
+
+After recovery, the database password is restored from the backup, which may not match the connection secret. Update the password:
+
+```bash
+# Get the password from the connection secret
+NEW_PASS=$(kubectl get secret myapp-db-connection -n myapp -o jsonpath='{.data.password}' | base64 -d)
+
+# Update the database password to match
+kubectl exec -n myapp myapp-db-1 -- psql -U postgres -c "ALTER USER myapp WITH PASSWORD '${NEW_PASS}';"
+
+# Restart your application to reconnect
+kubectl rollout restart deployment/myapp -n myapp
+```
+
+#### Step 5: Re-enable WAL Archiving
+
+After recovery, disable restore mode to re-enable continuous WAL archiving:
+
+```yaml
+apiVersion: dip.io/v1alpha1
+kind: Postgres
+metadata:
+  name: myapp-db
+  namespace: myapp
+spec:
+  parameters:
+    # ... same config as before ...
+    barmanBackup:
+      enabled: true
+      retentionDays: 7
+    # Remove or comment out the restore section:
+    # restore:
+    #   method: barmanObjectStore
+```
+
+Apply the updated config:
+
+```bash
+kubectl apply -f myapp-db.yaml
+
+# Verify WAL archiving resumed
+kubectl get cluster myapp-db -n myapp -o jsonpath='{.status.conditions}' | jq '.[] | select(.type=="ContinuousArchiving")'
+```
+
+#### Point-in-Time Recovery (PITR)
+
+To restore to a specific point in time, add the `targetTime` parameter:
+
+```yaml
+spec:
+  parameters:
+    restore:
+      method: barmanObjectStore
+      targetTime: "2024-01-15T10:30:00Z"  # ISO 8601 format
+```
+
+### Barman Backup Configuration Options
+
+| Parameter | Required | Default | Description |
+|-----------|----------|---------|-------------|
+| `barmanBackup.enabled` | No | `false` | Enable continuous WAL archiving to S3 |
+| `barmanBackup.bucketName` | No | `${resourcePrefix}-barman` | S3 bucket name |
+| `barmanBackup.bucketPrefix` | No | `${namespace}/${identifier}` | Path prefix in bucket |
+| `barmanBackup.retentionDays` | No | `7` | Backup retention period (1-365 days) |
+| `barmanBackup.compression` | No | `gzip` | Compression: gzip, bzip2, snappy, none |
+| `barmanBackup.scheduleBaseBackup` | No | `0 0 0 * * *` | Cron schedule for base backups |
+| `restore.method` | No | `backup` | `barmanObjectStore` for S3 restore |
+| `restore.targetTime` | No | - | PITR target time (ISO 8601 format) |
+
+### VolumeSnapshot Backups
+
+CloudNativePG also supports VolumeSnapshot-based backups for fast, storage-level snapshots.
+
+#### Enabling Scheduled Snapshots
 
 Enable daily VolumeSnapshot backups by setting `enableSnapshots: true`:
 
@@ -431,9 +638,9 @@ spec:
 
 This creates a `ScheduledBackup` resource that runs daily at midnight using the `volumeSnapshot` method.
 
-### Creating On-Demand Backups
+#### Creating On-Demand VolumeSnapshot Backups
 
-To create an immediate backup, apply a CNPG `Backup` resource directly:
+To create an immediate VolumeSnapshot backup:
 
 ```yaml
 apiVersion: postgresql.cnpg.io/v1
@@ -461,7 +668,7 @@ kubectl wait backup myapp-db-backup-manual -n myapp \
 kubectl get volumesnapshots -n myapp
 ```
 
-### Restoring from a VolumeSnapshot
+#### Restoring from a VolumeSnapshot
 
 To restore a database from a VolumeSnapshot, create a new Postgres resource with the `restore` configuration:
 
@@ -496,14 +703,14 @@ The new cluster will bootstrap by:
 3. Replaying WAL to reach consistency
 4. Bringing up replica instances
 
-### Restore Configuration Options
+#### VolumeSnapshot Restore Options
 
 | Parameter | Required | Default | Description |
 |-----------|----------|---------|-------------|
 | `restore.sourceIdentifier` | Yes | - | Name of the VolumeSnapshot or Backup object |
 | `restore.method` | No | `backup` | Restore method: `volumeSnapshot` or `backup` |
 
-### Listing Available Snapshots
+#### Listing Available Snapshots
 
 ```bash
 # List all VolumeSnapshots in a namespace

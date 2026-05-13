@@ -79,22 +79,30 @@ test-restore-from-volumesnapshot: ## Assert rendered output of cnpg-restore-from
 		|| { echo "❌ Expected snapshot name not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
 	echo "✅ VolumeSnapshot restore render-check passed!"
 
-test-barman-backup: ## Assert rendered output of cnpg-barman-backup contains barman config, IAM resources, and serviceAccountTemplate
-	@echo "🔍 Checking rendered output for Barman backup configuration..."
+test-barman-backup: ## Assert rendered output of cnpg-barman-backup contains plugin-based ObjectStore, IAM resources, and serviceAccountTemplate
+	@echo "🔍 Checking rendered output for Barman backup configuration (plugin-based)..."
 	@OUTPUT=$$(crossplane render \
 		$(BASE_DIR)examples/cnpg-barman-backup.yaml \
 		$(BASE_DIR)postgres-composition-cnpg.yaml \
 		$(BASE_DIR)functions-only.yaml \
 		--xrd=$(BASE_DIR)postgres-xrd.yaml \
 		--required-resources=$(BASE_DIR)test-environment-config.yaml 2>&1) || { echo "❌ Render failed"; echo "$$OUTPUT"; exit 1; }; \
-	echo "$$OUTPUT" | grep -q "barmanObjectStore:" \
-		|| { echo "❌ Expected 'barmanObjectStore:' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "kind: ObjectStore" \
+		|| { echo "❌ Expected 'kind: ObjectStore' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "apiVersion: barmancloud.cnpg.io/v1" \
+		|| { echo "❌ Expected 'apiVersion: barmancloud.cnpg.io/v1' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
 	echo "$$OUTPUT" | grep -q "destinationPath: s3://test-cluster-barman/test-namespace/myapp-with-barman" \
 		|| { echo "❌ Expected S3 destination path not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
 	echo "$$OUTPUT" | grep -q "inheritFromIAMRole: true" \
 		|| { echo "❌ Expected 'inheritFromIAMRole: true' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
 	echo "$$OUTPUT" | grep -q "retentionPolicy:" \
 		|| { echo "❌ Expected 'retentionPolicy:' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "plugins:" \
+		|| { echo "❌ Expected 'plugins:' section not found in Cluster spec"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "name: barman-cloud.cloudnative-pg.io" \
+		|| { echo "❌ Expected plugin name 'barman-cloud.cloudnative-pg.io' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "barmanObjectName: myapp-with-barman-backup" \
+		|| { echo "❌ Expected 'barmanObjectName: myapp-with-barman-backup' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
 	echo "$$OUTPUT" | grep -q "serviceAccountTemplate:" \
 		|| { echo "❌ Expected 'serviceAccountTemplate:' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
 	echo "$$OUTPUT" | grep -q "eks.amazonaws.com/role-arn:" \
@@ -109,14 +117,16 @@ test-barman-backup: ## Assert rendered output of cnpg-barman-backup contains bar
 		|| { echo "❌ Expected IAM RolePolicyAttachment resource not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
 	echo "$$OUTPUT" | grep -q "kind: ScheduledBackup" \
 		|| { echo "❌ Expected ScheduledBackup resource not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
-	echo "$$OUTPUT" | grep -q "method: barmanObjectStore" \
-		|| { echo "❌ Expected 'method: barmanObjectStore' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "method: plugin" \
+		|| { echo "❌ Expected 'method: plugin' not found in ScheduledBackup"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "pluginConfiguration:" \
+		|| { echo "❌ Expected 'pluginConfiguration:' not found in ScheduledBackup"; echo "$$OUTPUT"; exit 1; }; \
 	echo "$$OUTPUT" | grep -q "compression: gzip" \
 		|| { echo "❌ Expected 'compression: gzip' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
 	echo "✅ Barman backup render-check passed!"
 
-test-barman-restore: ## Assert rendered output of cnpg-barman-restore contains externalClusters and recovery bootstrap
-	@echo "🔍 Checking rendered output for Barman restore configuration..."
+test-barman-restore: ## Assert rendered output of cnpg-barman-restore contains plugin-based externalClusters and recovery bootstrap
+	@echo "🔍 Checking rendered output for Barman restore configuration (plugin-based)..."
 	@OUTPUT=$$(crossplane render \
 		$(BASE_DIR)examples/cnpg-barman-restore.yaml \
 		$(BASE_DIR)postgres-composition-cnpg.yaml \
@@ -129,10 +139,14 @@ test-barman-restore: ## Assert rendered output of cnpg-barman-restore contains e
 		|| { echo "❌ Expected 'name: barmanBackupSource' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
 	echo "$$OUTPUT" | grep -q "source: barmanBackupSource" \
 		|| { echo "❌ Expected 'source: barmanBackupSource' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
-	echo "$$OUTPUT" | grep -q "destinationPath: s3://my-barman-bucket/myapp/restored-from-barman" \
-		|| { echo "❌ Expected S3 destination path not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
-	echo "$$OUTPUT" | grep -q "maxParallel: 4" \
-		|| { echo "❌ Expected 'maxParallel: 4' for WAL recovery not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "plugin:" \
+		|| { echo "❌ Expected 'plugin:' section not found in externalClusters"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "name: barman-cloud.cloudnative-pg.io" \
+		|| { echo "❌ Expected plugin name 'barman-cloud.cloudnative-pg.io' not found in externalClusters"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "barmanObjectName: restored-from-barman-backup" \
+		|| { echo "❌ Expected 'barmanObjectName: restored-from-barman-backup' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "serverName: restored-from-barman" \
+		|| { echo "❌ Expected 'serverName: restored-from-barman' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
 	echo "✅ Barman restore render-check passed!"
 
 clean: ## Clean up any generated files

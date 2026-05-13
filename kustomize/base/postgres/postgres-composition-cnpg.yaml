@@ -400,6 +400,28 @@ spec:
                 controlledResources: ["memory", "cpu"]
           {{- end }}
 
+          {{- if and $barmanEnabled (not $skipBarmanBackup) }}
+          ---
+          apiVersion: barmancloud.cnpg.io/v1
+          kind: ObjectStore
+          metadata:
+            name: {{ $targetIdentifier }}-backup
+            namespace: {{ $namespace }}
+            annotations:
+              gotemplating.fn.crossplane.io/composition-resource-name: barman-objectstore
+          spec:
+            configuration:
+              destinationPath: {{ $barmanDestinationPath }}
+              s3Credentials:
+                inheritFromIAMRole: true
+              wal:
+                compression: {{ $barmanCompression }}
+                maxParallel: 4
+              data:
+                compression: {{ $barmanCompression }}
+            retentionPolicy: "{{ $barmanRetentionDays }}d"
+          {{- end }}
+
           {{- if $barmanEnabled }}
           ---
           # IAM Role for CNPG backup to S3 via IRSA

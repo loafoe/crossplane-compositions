@@ -1,4 +1,4 @@
-.PHONY: test validate render render-check test-restore-from-volumesnapshot clean help
+.PHONY: test validate render render-check test-restore-from-volumesnapshot test-barman-backup clean help
 
 # Default target
 .DEFAULT_GOAL := help
@@ -15,7 +15,7 @@ help: ## Show this help message
 	@echo 'Available targets:'
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-15s %s\n", $$1, $$2}'
 
-test: validate render render-check test-restore-from-volumesnapshot ## Run all tests (validate + render + snapshot assertions)
+test: validate render render-check test-restore-from-volumesnapshot test-barman-backup ## Run all tests (validate + render + snapshot assertions)
 	@echo "✅ All postgres tests passed!"
 
 validate: ## Validate the composition and XRD using crossplane beta validate
@@ -78,6 +78,42 @@ test-restore-from-volumesnapshot: ## Assert rendered output of cnpg-restore-from
 	echo "$$OUTPUT" | grep -q "myapp-local-snapshots-20240101" \
 		|| { echo "❌ Expected snapshot name not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
 	echo "✅ VolumeSnapshot restore render-check passed!"
+
+test-barman-backup: ## Assert rendered output of cnpg-barman-backup contains barman config, IAM resources, and serviceAccountTemplate
+	@echo "🔍 Checking rendered output for Barman backup configuration..."
+	@OUTPUT=$$(crossplane render \
+		$(BASE_DIR)examples/cnpg-barman-backup.yaml \
+		$(BASE_DIR)postgres-composition-cnpg.yaml \
+		$(BASE_DIR)functions-only.yaml \
+		--xrd=$(BASE_DIR)postgres-xrd.yaml \
+		--required-resources=$(BASE_DIR)test-environment-config.yaml 2>&1) || { echo "❌ Render failed"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "barmanObjectStore:" \
+		|| { echo "❌ Expected 'barmanObjectStore:' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "destinationPath: s3://test-cluster-barman/test-namespace/myapp-with-barman" \
+		|| { echo "❌ Expected S3 destination path not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "inheritFromIAMRole: true" \
+		|| { echo "❌ Expected 'inheritFromIAMRole: true' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "retentionPolicy:" \
+		|| { echo "❌ Expected 'retentionPolicy:' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "serviceAccountTemplate:" \
+		|| { echo "❌ Expected 'serviceAccountTemplate:' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "eks.amazonaws.com/role-arn:" \
+		|| { echo "❌ Expected IRSA annotation not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "arn:aws:iam::123456789012:role/test-namespace-myapp-with-barman-cnpg-backup" \
+		|| { echo "❌ Expected IAM role ARN not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "kind: Role" \
+		|| { echo "❌ Expected IAM Role resource not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "kind: Policy" \
+		|| { echo "❌ Expected IAM Policy resource not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "kind: RolePolicyAttachment" \
+		|| { echo "❌ Expected IAM RolePolicyAttachment resource not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "kind: ScheduledBackup" \
+		|| { echo "❌ Expected ScheduledBackup resource not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "method: barmanObjectStore" \
+		|| { echo "❌ Expected 'method: barmanObjectStore' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "compression: gzip" \
+		|| { echo "❌ Expected 'compression: gzip' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "✅ Barman backup render-check passed!"
 
 clean: ## Clean up any generated files
 	@echo "🧹 Cleaning up postgres test artifacts..."

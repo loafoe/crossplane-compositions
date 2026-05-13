@@ -5,7 +5,7 @@ metadata:
   namespace: crossplane-system
   labels:
     provider: cnpg
-    revision: "52"
+    revision: "53"
 spec:
   # Reference to the XRD
   compositeTypeRef:
@@ -13,8 +13,25 @@ spec:
     kind: Postgres
   
   mode: Pipeline
-  
+
   pipeline:
+  # Load environment configurations for AWS account, region, and cluster info
+  - step: load-environment-configs
+    functionRef:
+      name: function-environment-configs
+    input:
+      apiVersion: environmentconfigs.fn.crossplane.io/v1beta1
+      kind: Input
+      spec:
+        environmentConfigs:
+        - type: Selector
+          selector:
+            mode: Multiple
+            matchLabels:
+              - key: config
+                type: Value
+                value: dip-software
+
   # Render CNPG resources
   - step: render-resources
     functionRef:
@@ -28,7 +45,16 @@ spec:
           {{- $xr := .observed.composite.resource }}
           {{- $namespace := $xr.metadata.namespace }}
           {{- $name := $xr.metadata.name }}
-          
+
+          {{- /* Environment Config Values */ -}}
+          {{- $env := index .context "apiextensions.crossplane.io/environment" | default dict }}
+          {{- $awsAccountId := index $env "accountId" | default "" }}
+          {{- $awsRegion := index $env "region" | default "eu-west-2" }}
+          {{- $resourcePrefix := index $env "resourcePrefix" | default "" }}
+          {{- $bootstrap := index $env "bootstrap" | default dict }}
+          {{- $oidcProvider := index $bootstrap "oidcProvider" | default (index $env "oidcProvider" | default "") }}
+          {{- $oidcProviderArn := index $bootstrap "oidcProviderArn" | default (index $env "oidcProviderArn" | default "") }}
+
           {{- /* T-Shirt Sizing Map */ -}}
           {{- $size := $xr.spec.parameters.size | default "small" }}
           
@@ -58,6 +84,27 @@ spec:
             {{- $vpaEnabled = $xr.spec.parameters.vpa.enabled | default false }}
             {{- $vpaUpdateMode = $xr.spec.parameters.vpa.updateMode | default "Off" }}
           {{- end }}
+
+          {{- /* Barman Backup Configuration */ -}}
+          {{- $barmanEnabled := false }}
+          {{- $barmanBucketName := printf "%s-barman" $resourcePrefix }}
+          {{- $barmanBucketPrefix := printf "%s/%s" $namespace $targetIdentifier }}
+          {{- $barmanRetentionDays := 7 }}
+          {{- $barmanCompression := "gzip" }}
+          {{- $barmanSchedule := "0 0 0 * * *" }}
+          {{- if $xr.spec.parameters.barmanBackup }}
+            {{- $barmanEnabled = $xr.spec.parameters.barmanBackup.enabled | default false }}
+            {{- if $xr.spec.parameters.barmanBackup.bucketName }}
+              {{- $barmanBucketName = $xr.spec.parameters.barmanBackup.bucketName }}
+            {{- end }}
+            {{- if $xr.spec.parameters.barmanBackup.bucketPrefix }}
+              {{- $barmanBucketPrefix = $xr.spec.parameters.barmanBackup.bucketPrefix }}
+            {{- end }}
+            {{- $barmanRetentionDays = $xr.spec.parameters.barmanBackup.retentionDays | default 7 }}
+            {{- $barmanCompression = $xr.spec.parameters.barmanBackup.compression | default "gzip" }}
+            {{- $barmanSchedule = $xr.spec.parameters.barmanBackup.scheduleBaseBackup | default "0 0 0 * * *" }}
+          {{- end }}
+          {{- $barmanDestinationPath := printf "s3://%s/%s" $barmanBucketName $barmanBucketPrefix }}
 
           {{- $dbMasterUsername := $xr.spec.parameters.masterUsername | default "" }}
           
@@ -125,7 +172,15 @@ spec:
               crossplane.io/external-name: {{ $targetIdentifier }}
           spec:
             instances: {{ $cnpgInstances }}
-            
+
+            {{- if $barmanEnabled }}
+            # Service account with IRSA annotation for S3 access
+            serviceAccountTemplate:
+              metadata:
+                annotations:
+                  eks.amazonaws.com/role-arn: arn:aws:iam::{{ $awsAccountId }}:role/{{ $namespace }}-{{ $targetIdentifier }}-cnpg-backup
+            {{- end }}
+
             # Bootstrap configuration
             bootstrap:
               {{- if $restoreIdentifier }}
@@ -147,16 +202,16 @@ spec:
                 secret:
                   name: {{ $dbMasterPasswordSecret.name }}
               {{- end }}
-            
+
             enableSuperuserAccess: true
-            
+
             # Storage configuration
             storage:
               size: {{ $dbAllocatedStorage }}Gi
               {{- if $storageClassName }}
               storageClass: {{ $storageClassName }}
               {{- end }}
-            
+
             # Resource Requirements (no CPU limits - allows bursting)
             resources:
               requests:
@@ -165,10 +220,31 @@ spec:
               limits:
                 memory: {{ $cnpgMemLim }}
 
-            {{- if $enableSnapshots }}
+            {{- if or $enableSnapshots $barmanEnabled }}
             backup:
+              {{- if $barmanEnabled }}
+              barmanObjectStore:
+                destinationPath: {{ $barmanDestinationPath }}
+                s3Credentials:
+                  inheritFromIAMRole: true
+                wal:
+                  compression: {{ $barmanCompression }}
+                  maxParallel: 2
+                data:
+                  compression: {{ $barmanCompression }}
+              retentionPolicy: "{{ $barmanRetentionDays }}d"
+              {{- end }}
+              {{- if $enableSnapshots }}
               volumeSnapshot:
                 className: {{ $snapshotClassName }}
+                {{- if $barmanEnabled }}
+                online: true
+                onlineConfiguration:
+                  immediateCheckpoint: false
+                  waitForArchive: true
+                {{- end }}
+              {{- end }}
+              target: prefer-standby
             {{- end }}
           
           {{- /* Password Secret - Always created (stub if user provided) */ -}}
@@ -255,6 +331,23 @@ spec:
               name: {{ $targetIdentifier }}
           {{- end }}
 
+          {{- if $barmanEnabled }}
+          ---
+          apiVersion: postgresql.cnpg.io/v1
+          kind: ScheduledBackup
+          metadata:
+            name: {{ $name }}-barman-backup
+            namespace: {{ $namespace }}
+            annotations:
+              gotemplating.fn.crossplane.io/composition-resource-name: barman-scheduled-backup
+          spec:
+            schedule: {{ $barmanSchedule | quote }}
+            method: barmanObjectStore
+            backupOwnerReference: self
+            cluster:
+              name: {{ $targetIdentifier }}
+          {{- end }}
+
           {{- if $vpaEnabled }}
           ---
           apiVersion: autoscaling.k8s.io/v1
@@ -282,7 +375,108 @@ spec:
                   cpu: 4
                 controlledResources: ["memory", "cpu"]
           {{- end }}
-  
+
+          {{- if $barmanEnabled }}
+          ---
+          # IAM Role for CNPG backup to S3 via IRSA
+          # Uses wildcard trust to allow any postgres service account in this namespace
+          apiVersion: iam.aws.m.upbound.io/v1beta1
+          kind: Role
+          metadata:
+            name: {{ $name }}-cnpg-backup-role
+            annotations:
+              gotemplating.fn.crossplane.io/composition-resource-name: cnpg-backup-iam-role
+          spec:
+            forProvider:
+              assumeRolePolicy: |
+                {
+                  "Version": "2012-10-17",
+                  "Statement": [
+                    {
+                      "Effect": "Allow",
+                      "Principal": {
+                        "Federated": "{{ $oidcProviderArn }}"
+                      },
+                      "Action": "sts:AssumeRoleWithWebIdentity",
+                      "Condition": {
+                        "StringLike": {
+                          "{{ $oidcProvider }}:sub": "system:serviceaccount:{{ $namespace }}:{{ $targetIdentifier }}",
+                          "{{ $oidcProvider }}:aud": "sts.amazonaws.com"
+                        }
+                      }
+                    }
+                  ]
+                }
+              name: {{ $namespace }}-{{ $targetIdentifier }}-cnpg-backup
+              tags:
+                ManagedBy: Crossplane
+                Namespace: {{ $namespace }}
+                Cluster: {{ $targetIdentifier }}
+                Purpose: CNPG-Barman-Backup
+            providerConfigRef:
+              name: default
+              kind: ClusterProviderConfig
+
+          ---
+          # IAM Policy for S3 access to barman bucket
+          apiVersion: iam.aws.m.upbound.io/v1beta1
+          kind: Policy
+          metadata:
+            name: {{ $name }}-cnpg-backup-policy
+            annotations:
+              gotemplating.fn.crossplane.io/composition-resource-name: cnpg-backup-iam-policy
+          spec:
+            forProvider:
+              name: {{ $namespace }}-{{ $targetIdentifier }}-cnpg-backup
+              policy: |
+                {
+                  "Version": "2012-10-17",
+                  "Statement": [
+                    {
+                      "Sid": "AllowBarmanS3Access",
+                      "Effect": "Allow",
+                      "Action": [
+                        "s3:GetObject",
+                        "s3:PutObject",
+                        "s3:DeleteObject",
+                        "s3:ListBucket",
+                        "s3:GetBucketLocation"
+                      ],
+                      "Resource": [
+                        "arn:aws:s3:::{{ $barmanBucketName }}",
+                        "arn:aws:s3:::{{ $barmanBucketName }}/{{ $namespace }}/*"
+                      ]
+                    }
+                  ]
+                }
+              tags:
+                ManagedBy: Crossplane
+                Namespace: {{ $namespace }}
+                Cluster: {{ $targetIdentifier }}
+                Purpose: CNPG-Barman-Backup
+            providerConfigRef:
+              name: default
+              kind: ClusterProviderConfig
+
+          ---
+          # Attach policy to role
+          apiVersion: iam.aws.m.upbound.io/v1beta1
+          kind: RolePolicyAttachment
+          metadata:
+            name: {{ $name }}-cnpg-backup-attachment
+            annotations:
+              gotemplating.fn.crossplane.io/composition-resource-name: cnpg-backup-iam-attachment
+          spec:
+            forProvider:
+              policyArnRef:
+                name: {{ $name }}-cnpg-backup-policy
+              roleRef:
+                name: {{ $name }}-cnpg-backup-role
+            providerConfigRef:
+              name: default
+              kind: ClusterProviderConfig
+          {{- end }}
+
   # Patch status fields
   - step: patch-and-transform
     functionRef:

@@ -1,0 +1,25 @@
+apiVersion: dip.io/v1alpha1
+kind: Postgres
+metadata:
+  name: myapp-with-barman
+  namespace: test-namespace
+  labels:
+    provider: cnpg
+spec:
+  crossplane:
+    compositionSelector:
+      matchLabels:
+        provider: cnpg
+  parameters:
+    identifier: myapp-with-barman
+    databaseName: myapp
+    masterUsername: myapp
+    size: small
+    allocatedStorage: 20
+    storageClassName: gp3-encrypted
+    enableSnapshots: true
+    snapshotClassName: ebs-csi-aws
+    barmanBackup:
+      enabled: true
+      retentionDays: 14
+      compression: gzip

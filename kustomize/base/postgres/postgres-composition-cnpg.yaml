@@ -5,7 +5,7 @@ metadata:
   namespace: crossplane-system
   labels:
     provider: cnpg
-    revision: "53"
+    revision: "54"
 spec:
   # Reference to the XRD
   compositeTypeRef:
@@ -386,6 +386,7 @@ spec:
             name: {{ $name }}-cnpg-backup-role
             annotations:
               gotemplating.fn.crossplane.io/composition-resource-name: cnpg-backup-iam-role
+              crossplane.io/external-name: {{ $namespace }}-{{ $targetIdentifier }}-cnpg-backup
           spec:
             forProvider:
               assumeRolePolicy: |
@@ -407,7 +408,6 @@ spec:
                     }
                   ]
                 }
-              name: {{ $namespace }}-{{ $targetIdentifier }}-cnpg-backup
               tags:
                 ManagedBy: Crossplane
                 Namespace: {{ $namespace }}
@@ -425,9 +425,9 @@ spec:
             name: {{ $name }}-cnpg-backup-policy
             annotations:
               gotemplating.fn.crossplane.io/composition-resource-name: cnpg-backup-iam-policy
+              crossplane.io/external-name: {{ $namespace }}-{{ $targetIdentifier }}-cnpg-backup
           spec:
             forProvider:
-              name: {{ $namespace }}-{{ $targetIdentifier }}-cnpg-backup
               policy: |
                 {
                   "Version": "2012-10-17",

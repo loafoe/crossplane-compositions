@@ -5,7 +5,7 @@ metadata:
   namespace: crossplane-system
   labels:
     provider: cnpg
-    revision: "58"
+    revision: "59"
 spec:
   # Reference to the XRD
   compositeTypeRef:
@@ -557,6 +557,18 @@ spec:
         - type: MatchString
           fieldPath: kind
           matchString: Secret
+
+      - name: barman-objectstore
+        readinessChecks:
+        - type: None
+
+      - name: barman-scheduled-backup
+        readinessChecks:
+        - type: None
+
+      - name: scheduled-backup
+        readinessChecks:
+        - type: None
 
   # Auto-ready function
   - step: auto-ready

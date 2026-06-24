@@ -1,4 +1,4 @@
-.PHONY: test validate render render-check test-restore-from-volumesnapshot test-barman-backup test-barman-restore clean help
+.PHONY: test validate render render-check render-check-no-backups test-restore-from-volumesnapshot test-barman-backup test-barman-restore clean help
 
 # Default target
 .DEFAULT_GOAL := help
@@ -15,7 +15,7 @@ help: ## Show this help message
 	@echo 'Available targets:'
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-15s %s\n", $$1, $$2}'
 
-test: validate render render-check test-restore-from-volumesnapshot test-barman-backup test-barman-restore ## Run all tests (validate + render + snapshot assertions)
+test: validate render render-check render-check-no-backups test-restore-from-volumesnapshot test-barman-backup test-barman-restore ## Run all tests (validate + render + snapshot assertions)
 	@echo "✅ All postgres tests passed!"
 
 validate: ## Validate the composition and XRD using crossplane beta validate
@@ -62,6 +62,24 @@ render-check: ## Assert rendered output of cnpg-snapshots example contains stora
 	echo "$$OUTPUT" | grep -q "className: csi-snapclass" \
 		|| { echo "❌ Expected 'className: csi-snapclass' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
 	echo "✅ Snapshot render-check passed!"
+
+render-check-no-backups: ## Regression: cnpg-minimal (no snapshots/barman) must render WITHOUT the patch-and-transform "no base template" fatal
+	@echo "🔍 Checking cnpg-minimal renders with no backup resources (regression for unconditional p&t entries)..."
+	@OUTPUT=$$(crossplane render \
+		$(BASE_DIR)examples/cnpg-minimal.yaml \
+		$(BASE_DIR)postgres-composition-cnpg.yaml \
+		$(BASE_DIR)functions-only.yaml \
+		--xrd=$(BASE_DIR)postgres-xrd.yaml \
+		--required-resources=$(BASE_DIR)test-environment-config.yaml 2>&1) || { echo "❌ Render failed (regression: disabled backups must not error)"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "no base template" \
+		&& { echo "❌ Regression: 'no base template' fatal returned — backup resources must not be listed unconditionally in patch-and-transform"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "kind: Cluster" \
+		|| { echo "❌ Expected 'kind: Cluster' not found — composition did not render the CNPG cluster"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "kind: ScheduledBackup" \
+		&& { echo "❌ Unexpected 'kind: ScheduledBackup' — minimal example must not render backups"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "kind: ObjectStore" \
+		&& { echo "❌ Unexpected 'kind: ObjectStore' — minimal example must not render barman"; echo "$$OUTPUT"; exit 1; }; \
+	echo "✅ No-backups render-check passed!"
 
 test-restore-from-volumesnapshot: ## Assert rendered output of cnpg-restore-from-volumesnapshot uses volumeSnapshots bootstrap
 	@echo "🔍 Checking rendered output for VolumeSnapshot restore bootstrap..."

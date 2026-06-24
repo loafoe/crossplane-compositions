@@ -5,7 +5,7 @@ metadata:
   namespace: crossplane-system
   labels:
     provider: cnpg
-    revision: "59"
+    revision: "60"
 spec:
   # Reference to the XRD
   compositeTypeRef:
@@ -338,6 +338,11 @@ spec:
             namespace: {{ $namespace }}
             annotations:
               gotemplating.fn.crossplane.io/composition-resource-name: scheduled-backup
+              # CNPG ScheduledBackup has no status.conditions, so function-auto-ready
+              # would never mark it ready. Declare readiness here (rather than via
+              # patch-and-transform, which fatally errors when this resource is not
+              # rendered — e.g. enableSnapshots/barman disabled).
+              gotemplating.fn.crossplane.io/ready: "True"
           spec:
             schedule: "0 0 0 * * *"
             method: volumeSnapshot
@@ -355,6 +360,7 @@ spec:
             namespace: {{ $namespace }}
             annotations:
               gotemplating.fn.crossplane.io/composition-resource-name: barman-scheduled-backup
+              gotemplating.fn.crossplane.io/ready: "True"
           spec:
             schedule: {{ $barmanSchedule | quote }}
             method: plugin
@@ -404,6 +410,7 @@ spec:
             namespace: {{ $namespace }}
             annotations:
               gotemplating.fn.crossplane.io/composition-resource-name: barman-objectstore
+              gotemplating.fn.crossplane.io/ready: "True"
           spec:
             configuration:
               destinationPath: {{ $barmanDestinationPath }}
@@ -558,17 +565,12 @@ spec:
           fieldPath: kind
           matchString: Secret
 
-      - name: barman-objectstore
-        readinessChecks:
-        - type: None
-
-      - name: barman-scheduled-backup
-        readinessChecks:
-        - type: None
-
-      - name: scheduled-backup
-        readinessChecks:
-        - type: None
+      # NOTE: backup resources (scheduled-backup, barman-scheduled-backup,
+      # barman-objectstore) are intentionally NOT listed here. They are rendered
+      # conditionally by the go-templating step, and patch-and-transform fatally
+      # errors on any named resource that has no base and was not produced upstream
+      # (i.e. when those backups are disabled). Their readiness is instead declared
+      # inline via the gotemplating.fn.crossplane.io/ready annotation.
 
   # Auto-ready function
   - step: auto-ready

@@ -223,12 +223,12 @@ spec:
             annotations:
               gotemplating.fn.crossplane.io/composition-resource-name: connection-secret
           type: Opaque
-          data:      
+          data:
              username: {{ $dbMasterUsername | b64enc }}
              {{- if $generatedPassword }}
              password: {{ $generatedPassword | b64enc }}
              {{- else }}
-             password: {{ "derived-from-secret" | b64enc }} 
+             password: {{ "derived-from-secret" | b64enc }}
              {{- end }}
              port: {{ printf "%d" (int $dbPort) | b64enc }}
              {{- if $databaseName }}
@@ -239,6 +239,14 @@ spec:
              endpoint: {{ printf "%s:%d" $endpoint (int $dbPort) | b64enc }}
              {{- end }}
              sslmode: {{ "require" | b64enc }}
+             {{- /* Only buildable when we generated the password ourselves and
+                    the endpoint is already known - with masterPasswordSecretRef
+                    the password lives in an external Secret we never read, and
+                    the endpoint isn't populated until the database resource
+                    reports status, so there is nothing to compose here yet. */}}
+             {{- if and $generatedPassword $endpoint $databaseName }}
+             url: {{ printf "postgresql://%s:%s@%s:%d/%s?sslmode=require" $dbMasterUsername $generatedPassword $endpoint (int $dbPort) $databaseName | b64enc }}
+             {{- end }}
           
           
           {{- if eq $dbType "rds-instance" }}

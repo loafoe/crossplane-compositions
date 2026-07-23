@@ -5,7 +5,7 @@ metadata:
   namespace: crossplane-system
   labels:
     provider: cnpg
-    revision: "60"
+    revision: "61"
 spec:
   # Reference to the XRD
   compositeTypeRef:
@@ -327,6 +327,10 @@ spec:
             sslmode: {{ "require" | b64enc }}
             {{- if $generatedPassword }}
             password: {{ $generatedPassword | b64enc }}
+            {{- /* Only buildable when we generated the password ourselves - with
+                   masterPasswordSecretRef the password lives in an external
+                   Secret we never read, so there is nothing to compose here. */}}
+            url: {{ printf "postgresql://%s:%s@%s:%d/%s?sslmode=require" ($dbMasterUsername | default "app") $generatedPassword $fqdn (int $dbPort) ($databaseName | default "app") | b64enc }}
             {{- end }}
 
           {{- if $enableSnapshots }}

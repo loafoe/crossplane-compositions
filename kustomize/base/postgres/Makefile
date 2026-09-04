@@ -119,6 +119,8 @@ test-barman-backup: ## Assert rendered output of cnpg-barman-backup contains plu
 		|| { echo "❌ Expected 'plugins:' section not found in Cluster spec"; echo "$$OUTPUT"; exit 1; }; \
 	echo "$$OUTPUT" | grep -q "name: barman-cloud.cloudnative-pg.io" \
 		|| { echo "❌ Expected plugin name 'barman-cloud.cloudnative-pg.io' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "isWALArchiver: true" \
+		|| { echo "❌ Expected 'isWALArchiver: true' not found - without it archive_mode stays forced on (waitForArchive needs it) but nothing archives, so WAL never recycles and silently fills the PV"; echo "$$OUTPUT"; exit 1; }; \
 	echo "$$OUTPUT" | grep -q "barmanObjectName: myapp-with-barman-backup" \
 		|| { echo "❌ Expected 'barmanObjectName: myapp-with-barman-backup' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
 	echo "$$OUTPUT" | grep -q "serviceAccountTemplate:" \

@@ -186,8 +186,18 @@ spec:
             {{- end }}
 
             {{- if and $barmanEnabled (not $skipBarmanBackup) }}
+            # isWALArchiver: true is required here - without it CNPG still
+            # turns on archive_mode (driven by backup.volumeSnapshot's
+            # waitForArchive below, which needs continuous archiving to
+            # exist), but has no active archiver to send WAL to. Every
+            # archive attempt then fails forever and WAL never gets
+            # recycled, silently filling the PV. This plugin is only ever
+            # registered when barman S3 backup is enabled, so it should
+            # always be the WAL archiver - there is no case in this
+            # composition where the plugin is present but shouldn't be.
             plugins:
               - name: barman-cloud.cloudnative-pg.io
+                isWALArchiver: true
                 parameters:
                   barmanObjectName: {{ $targetIdentifier }}-backup
             {{- end }}

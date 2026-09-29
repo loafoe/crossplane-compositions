@@ -9,7 +9,7 @@ The composed `argoproj.io/Application` is created in the **same namespace as the
 - ArgoCD's `application.namespaces` setting (or `--application-namespaces` flag on the controller/API server) must include the namespace(s) `HelmApplication` resources are created in (e.g. `crossplane-system`, or a wildcard pattern covering it).
 - If the namespace isn't registered there, ArgoCD will not pick up the generated Application at all - it will sit unreconciled with no error surfaced by Crossplane.
 
-Also, never set `metadata.finalizers: [resources-finalizer.argocd.argoproj.io]` on the `HelmApplication` itself (only ArgoCD's own `Application` object understands that finalizer). Doing so permanently blocks deletion of the composite; see the `x-kubernetes-validations` rule in `helmapp-xrd.yaml` for the guardrail against adding it via update.
+Also, never set `metadata.finalizers: [resources-finalizer.argocd.argoproj.io]` on the `HelmApplication` itself (only ArgoCD's own `Application` object understands that finalizer). Doing so permanently blocks deletion of the composite. This cannot be enforced via the XRD schema - Kubernetes CRD `x-kubernetes-validations` rules cannot see `metadata.finalizers` at all - so there is currently no automated guard against it; a cluster-level `ValidatingAdmissionPolicy` would be needed to enforce this in-cluster.
 
 ## Variable Substitution
 

@@ -17,6 +17,18 @@ spec:
     schema:
       openAPIV3Schema:
         type: object
+        # Transition rule: only blocks *newly adding* the finalizer on an update.
+        # A rule that references oldSelf is never evaluated on create (see
+        # https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/#transition-rules),
+        # so this deliberately does not block create - an unconditional create+update
+        # rule would also reject every subsequent write (including Crossplane's own
+        # reconciles) to a HelmApplication that already has the finalizer stuck from
+        # before this rule existed, which is what caused this check to be reverted
+        # the first time it was added (see git history). Existing stuck resources can
+        # still be patched to remove the finalizer.
+        x-kubernetes-validations:
+        - rule: "!has(self.metadata.finalizers) || !self.metadata.finalizers.exists(f, f == 'resources-finalizer.argocd.argoproj.io') || (has(oldSelf.metadata.finalizers) && oldSelf.metadata.finalizers.exists(f, f == 'resources-finalizer.argocd.argoproj.io'))"
+          message: "Do not add the ArgoCD resources-finalizer to the HelmApplication itself. That finalizer is only understood by the ArgoCD application-controller reconciling an Application, not this composite - adding it here permanently blocks deletion. Crossplane adds its own composite.apiextensions.crossplane.io finalizer automatically; omit metadata.finalizers entirely."
         properties:
           spec:
             type: object
@@ -207,6 +219,15 @@ spec:
           status:
             type: object
             properties:
+              syncStatus:
+                type: string
+                description: "ArgoCD Application sync status (e.g. Synced, OutOfSync, Unknown), copied from the underlying Application"
+              healthStatus:
+                type: string
+                description: "ArgoCD Application health status (e.g. Healthy, Progressing, Degraded, Suspended, Missing, Unknown), copied from the underlying Application"
+              message:
+                type: string
+                description: "Latest ArgoCD sync operation message, copied from the underlying Application"
               conditions:
                 type: array
                 items:

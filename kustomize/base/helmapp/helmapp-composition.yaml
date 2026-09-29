@@ -348,6 +348,21 @@ spec:
       - name: argocd-app
         readinessChecks:
         - type: None
+        patches:
+        # Propagate ArgoCD's own sync/health status onto the composite so
+        # consumers can tell success from failure without going around
+        # Crossplane to query the Application directly. function-auto-ready
+        # cannot read these (see the comment on the auto-ready step below),
+        # so this is the only place that status is surfaced.
+        - type: ToCompositeFieldPath
+          fromFieldPath: status.sync.status
+          toFieldPath: status.syncStatus
+        - type: ToCompositeFieldPath
+          fromFieldPath: status.health.status
+          toFieldPath: status.healthStatus
+        - type: ToCompositeFieldPath
+          fromFieldPath: status.operationState.message
+          toFieldPath: status.message
 
   - step: auto-ready
     functionRef:

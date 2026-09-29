@@ -1,0 +1,32 @@
+# First real Application catalog entry - ported from the langfuse-bootstrap
+# wrapper chart already deployed to dip-ce-k3s-eu (see innovation-day/langfuse/
+# README.md). Deploying this template creates a full new langfuse-bootstrap
+# stack (ArgoCD Application for the upstream langfuse-k8s chart, plus its own
+# CNPG Postgres cluster, S3 bucket, and Redis) - not a lightweight instance.
+# Exposed parameter (clickhouseReplicas) is a real, verified field in
+# langfuse-bootstrap's own values schema (config/langfuse-values.yaml's
+# clickhouse.cluster.replicas), not a guessed generic "replicaCount" that
+# wouldn't actually exist in this chart's schema.
+apiVersion: centcom.dip.io/v1alpha1
+kind: ApplicationTemplate
+metadata:
+  name: langfuse
+spec:
+  displayName: "Langfuse (LLM observability)"
+  description: >-
+    Self-hosted Langfuse via the langfuse-bootstrap wrapper chart - deploys
+    the upstream langfuse-k8s ArgoCD Application plus its own CNPG Postgres,
+    S3 bucket, and Redis. Provisions real, billable infrastructure; review
+    the dry-run diff carefully before confirming a deploy.
+  category: observability
+  source:
+    repoURL: oci://ghcr.io/philips-software/helm-charts/langfuse-bootstrap
+    targetRevision: "0.7.0"
+  defaultNamespace: langfuse-system
+  parameters:
+    - name: clickhouseReplicas
+      jsonPath: spec.source.helm.valuesObject.clickhouse.cluster.replicas
+      type: integer
+      default: 1
+      required: false
+  allowedGroups: ["philips-internal:dip-oaas-admins"]

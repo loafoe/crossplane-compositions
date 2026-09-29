@@ -2,6 +2,15 @@
 
 This directory contains the Crossplane Composition for HelmApplication resources, which creates ArgoCD Applications for Helm chart deployments.
 
+## Prerequisites
+
+The composed `argoproj.io/Application` is created in the **same namespace as the `HelmApplication`** composite, not in a dedicated ArgoCD namespace. This relies on ArgoCD's [Applications in any namespace](https://argo-cd.readthedocs.io/en/stable/operator-manual/app-any-namespace/) feature:
+
+- ArgoCD's `application.namespaces` setting (or `--application-namespaces` flag on the controller/API server) must include the namespace(s) `HelmApplication` resources are created in (e.g. `crossplane-system`, or a wildcard pattern covering it).
+- If the namespace isn't registered there, ArgoCD will not pick up the generated Application at all - it will sit unreconciled with no error surfaced by Crossplane.
+
+Also, never set `metadata.finalizers: [resources-finalizer.argocd.argoproj.io]` on the `HelmApplication` itself (only ArgoCD's own `Application` object understands that finalizer). Doing so permanently blocks deletion of the composite; see the `x-kubernetes-validations` rule in `helmapp-xrd.yaml` for the guardrail against adding it via update.
+
 ## Variable Substitution
 
 The composition supports automatic variable substitution in the `spec.source.helm.valuesObject` section. Variables use the format `${variableName}` and are replaced with values from the EnvironmentConfig context.

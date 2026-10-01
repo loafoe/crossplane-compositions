@@ -61,6 +61,7 @@ spec:
   source:
     repoURL: oci://ghcr.io/philips-software/helm-charts/agentgateway-bootstrap
     targetRevision: "0.9.0"
+    path: "."
   defaultNamespace: agentgateway
   parameters:
     - name: argocdProject

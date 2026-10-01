@@ -5,12 +5,21 @@
 # below is copied verbatim from that live valuesObject - deploying this
 # template with zero overrides reproduces the live stack, not just a fresh
 # generic instance. Each parameter stays independently overridable (e.g. a
-# different environmentConfig/bedrock.auth.roleArn to target another
-# cluster/account) since centcom's catalog.Render only ever auto-populates
+# different bedrock.auth.roleArn to target another cluster/account) since
+# centcom's catalog.Render only ever auto-populates
 # spec.source.{repoURL,targetRevision,chart} and spec.destination.namespace -
 # everything else, including spec.project (ArgoCD's own project, not the
 # chart's unrelated `argoProject` value field), only lands in the rendered
 # HelmApplication because a parameter's jsonPath targets it.
+#
+# Deliberately NOT a parameter here: environmentConfig. The HelmApplication
+# composition (helmapp-composition.yaml) always rebuilds this key itself from
+# the target cluster's real Crossplane EnvironmentConfig resource (accountId/
+# region/resourcePrefix/etc., filterable via source.withConfigKeys), then
+# merges any user-supplied spec.source.helm.valuesObject.environmentConfig on
+# top as a per-key override. A dip-ce-k3s-eu-specific default baked in here
+# would silently override the correct auto-injected values on any other
+# cluster/account this template is deployed to - worse than just being inert.
 #
 # Known fidelity gaps a deploy of this template does NOT cover - read before
 # relying on it to fully recreate the deployment:
@@ -23,8 +32,8 @@
 #   - bedrock.auth.roleArn is an IRSA role scoped to dip-ce-k3s-eu's own AWS
 #     account (187340443086) with a trust policy for that cluster's OIDC
 #     provider - it will not resolve on another cluster/account. Override
-#     bedrock.auth.roleArn (and environmentConfig) with a real
-#     pre-provisioned role before deploying elsewhere.
+#     bedrock.auth.roleArn with a real pre-provisioned role before deploying
+#     elsewhere.
 #   - standalone.image.tag pins an alpha build (v1.6.0-alpha.2) for a known
 #     Bedrock redactedContent parsing bug (upstream #3234/#3235) - a
 #     deliberate, reversible deviation from the chart's own appVersion.
@@ -165,13 +174,5 @@ spec:
       type: object
       default:
         enabled: true
-      required: false
-    - name: environmentConfig
-      jsonPath: spec.source.helm.valuesObject.environmentConfig
-      type: object
-      default:
-        accountId: "010526241823"
-        region: eu-west-2
-        resourcePrefix: dip-ce-k3s-eu
       required: false
   allowedGroups: ["philips-internal:dip-oaas-admins"]

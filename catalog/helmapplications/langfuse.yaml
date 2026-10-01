@@ -22,6 +22,12 @@ spec:
   source:
     repoURL: oci://ghcr.io/philips-software/helm-charts/langfuse-bootstrap
     targetRevision: "0.7.0"
+    # Required - an OCI repoURL with neither chart nor path fails ArgoCD's
+    # own source invariant (satellite-side validateHelmApplicationSpec:
+    # "neither spec.source.chart nor spec.source.path is present"), the same
+    # bug hit live deploying the agentgateway template. The chart lives at
+    # the registry root, so path "." (not a chart name) is correct here too.
+    path: "."
   defaultNamespace: langfuse-system
   parameters:
     - name: clickhouseReplicas

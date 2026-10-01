@@ -1,0 +1,177 @@
+# Second catalog entry - ported from the real ArgoCD Application deployed to
+# dip-ce-k3s-eu (innovation-day/agentgateway/dip-ce-k3s-eu-application.yaml,
+# chart 0.9.0, 2026-09-30). Unlike langfuse.yaml (one scalar parameter,
+# everything else left at the chart's own defaults), every parameter default
+# below is copied verbatim from that live valuesObject - deploying this
+# template with zero overrides reproduces the live stack, not just a fresh
+# generic instance. Each parameter stays independently overridable (e.g. a
+# different environmentConfig/bedrock.auth.roleArn to target another
+# cluster/account) since centcom's catalog.Render only ever auto-populates
+# spec.source.{repoURL,targetRevision,chart} and spec.destination.namespace -
+# everything else, including spec.project (ArgoCD's own project, not the
+# chart's unrelated `argoProject` value field), only lands in the rendered
+# HelmApplication because a parameter's jsonPath targets it.
+#
+# Known fidelity gaps a deploy of this template does NOT cover - read before
+# relying on it to fully recreate the deployment:
+#   - Three Secrets must already exist in the target namespace, created
+#     out-of-band (no chart template creates them): agentgateway-oidc-secret
+#     (key clientSecret), agentgateway-standalone-oidc (key
+#     OIDC_COOKIE_SECRET), agentgateway-langfuse-otlp (key OTLP_AUTH_HEADER).
+#     Missing any of them breaks ui.oidc / standaloneTracing at runtime even
+#     though the ArgoCD sync itself succeeds.
+#   - bedrock.auth.roleArn is an IRSA role scoped to dip-ce-k3s-eu's own AWS
+#     account (187340443086) with a trust policy for that cluster's OIDC
+#     provider - it will not resolve on another cluster/account. Override
+#     bedrock.auth.roleArn (and environmentConfig) with a real
+#     pre-provisioned role before deploying elsewhere.
+#   - standalone.image.tag pins an alpha build (v1.6.0-alpha.2) for a known
+#     Bedrock redactedContent parsing bug (upstream #3234/#3235) - a
+#     deliberate, reversible deviation from the chart's own appVersion.
+#   - standalone.replicaCount is pinned to 1: the Admin UI's OIDC session
+#     state is per-process with no working session affinity on this
+#     cluster's Gateway API path - do not raise it without fixing that first.
+apiVersion: centcom.dip.io/v1alpha1
+kind: ApplicationTemplate
+metadata:
+  name: agentgateway
+spec:
+  displayName: "Agentgateway (LLM Gateway / Bedrock Proxy)"
+  description: >-
+    Standalone agentgateway via the agentgateway-bootstrap wrapper chart -
+    an LLM gateway (OpenAI-compatible API) in front of Amazon Bedrock (+
+    optional OpenRouter), with its own CNPG Postgres for cost tracking and
+    an Admin UI. Default parameters reproduce the real dip-ce-k3s-eu
+    deployment byte-for-byte (same Bedrock models/pricing overrides, OIDC
+    login, Langfuse OTLP tracing, pinned alpha image for a known Bedrock
+    bug). Provisions real, billable infrastructure (Postgres, IRSA-backed
+    Bedrock access); review the dry-run diff and the fidelity-gap notes
+    above (required out-of-band Secrets, cluster-specific IAM role) before
+    confirming a deploy to any cluster other than dip-ce-k3s-eu.
+  category: ai-gateway
+  source:
+    repoURL: oci://ghcr.io/philips-software/helm-charts/agentgateway-bootstrap
+    targetRevision: "0.9.0"
+  defaultNamespace: agentgateway
+  parameters:
+    - name: argocdProject
+      jsonPath: spec.project
+      type: string
+      default: oaas-observability
+      required: false
+    - name: mode
+      jsonPath: spec.source.helm.valuesObject.mode
+      type: string
+      default: standalone
+      required: false
+    - name: argoProject
+      jsonPath: spec.source.helm.valuesObject.argoProject
+      type: string
+      default: oaas-observability
+      required: false
+    - name: gateway
+      jsonPath: spec.source.helm.valuesObject.gateway
+      type: object
+      default:
+        namespace: agentgateway
+      required: false
+    - name: bedrock
+      jsonPath: spec.source.helm.valuesObject.bedrock
+      type: object
+      default:
+        enabled: true
+        model: us.anthropic.claude-sonnet-5
+        extraModels:
+          - zai.glm-5
+          - us.openai.gpt-5.6-luna
+          - us.moonshotai.kimi-k3
+          - us.openai.gpt-6-luna
+        modelCatalogOverrides:
+          - name: us.openai.gpt-6-luna
+            rates:
+              input: "0.11"
+              output: "0.55"
+              cacheRead: "0.011"
+              cacheWrite: "0.1375"
+            tiers:
+              - contextOver: 272000
+                rates:
+                  input: "0.22"
+                  output: "0.825"
+                  cacheRead: "0.022"
+                  cacheWrite: "0.275"
+          - name: us.moonshotai.kimi-k3
+            rates:
+              input: "3.3"
+              output: "16.5"
+              cacheRead: "0.33"
+              cacheWrite: "4.125"
+        auth:
+          type: irsa
+          roleArn: arn:aws:iam::187340443086:role/agentgateway-bedrock-access
+      required: false
+    - name: openrouter
+      jsonPath: spec.source.helm.valuesObject.openrouter
+      type: object
+      default:
+        enabled: false
+      required: false
+    - name: promptLogging
+      jsonPath: spec.source.helm.valuesObject.promptLogging
+      type: object
+      default:
+        enabled: true
+      required: false
+    - name: standalone
+      jsonPath: spec.source.helm.valuesObject.standalone
+      type: object
+      default:
+        image:
+          tag: v1.6.0-alpha.2
+        replicaCount: 1
+      required: false
+    - name: ui
+      jsonPath: spec.source.helm.valuesObject.ui
+      type: object
+      default:
+        enabled: true
+        oidc:
+          enabled: true
+          issuer: https://issuer.dip-ce-k3s-eu.hsp.philips.com
+          clientId: agentgateway-ui
+          redirectURI: https://agentgateway.dip-ce-k3s-eu.hsp.philips.com/oauth/callback
+          scopes:
+            - profile
+            - email
+            - groups
+        authorization:
+          groups:
+            - "philips-internal:dip-centcom-admins"
+      required: false
+    - name: standaloneTracing
+      jsonPath: spec.source.helm.valuesObject.standaloneTracing
+      type: object
+      default:
+        enabled: true
+        otlpEndpoint: https://langfuse.dip-ce-k3s-eu.hsp.philips.com
+        path: /api/public/otel/v1/traces
+        headers:
+          x-langfuse-ingestion-version: '"4"'
+        authHeaderSecret:
+          name: agentgateway-langfuse-otlp
+      required: false
+    - name: monitoring
+      jsonPath: spec.source.helm.valuesObject.monitoring
+      type: object
+      default:
+        enabled: true
+      required: false
+    - name: environmentConfig
+      jsonPath: spec.source.helm.valuesObject.environmentConfig
+      type: object
+      default:
+        accountId: "010526241823"
+        region: eu-west-2
+        resourcePrefix: dip-ce-k3s-eu
+      required: false
+  allowedGroups: ["philips-internal:dip-oaas-admins"]

@@ -1,4 +1,4 @@
-.PHONY: test validate render render-check render-check-no-backups test-restore-from-volumesnapshot test-barman-backup test-barman-restore clean help
+.PHONY: test validate render render-check render-check-no-backups test-restore-from-volumesnapshot test-barman-backup test-barman-restore test-pgvector clean help
 
 # Default target
 .DEFAULT_GOAL := help
@@ -15,7 +15,7 @@ help: ## Show this help message
 	@echo 'Available targets:'
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-15s %s\n", $$1, $$2}'
 
-test: validate render render-check render-check-no-backups test-restore-from-volumesnapshot test-barman-backup test-barman-restore ## Run all tests (validate + render + snapshot assertions)
+test: validate render render-check render-check-no-backups test-restore-from-volumesnapshot test-barman-backup test-barman-restore test-pgvector ## Run all tests (validate + render + snapshot assertions)
 	@echo "✅ All postgres tests passed!"
 
 validate: ## Validate the composition and XRD using crossplane beta validate
@@ -168,6 +168,24 @@ test-barman-restore: ## Assert rendered output of cnpg-barman-restore contains p
 	echo "$$OUTPUT" | grep -q "serverName: restored-from-barman" \
 		|| { echo "❌ Expected 'serverName: restored-from-barman' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
 	echo "✅ Barman restore render-check passed!"
+
+test-pgvector: ## Assert rendered output of cnpg-pgvector uses postInitApplicationSQL (not postInitSQL) to CREATE EXTENSION
+	@echo "🔍 Checking rendered output for extensions bootstrap..."
+	@OUTPUT=$$(crossplane render \
+		$(BASE_DIR)examples/cnpg-pgvector.yaml \
+		$(BASE_DIR)postgres-composition-cnpg.yaml \
+		$(BASE_DIR)functions-only.yaml \
+		--xrd=$(BASE_DIR)postgres-xrd.yaml \
+		--required-resources=$(BASE_DIR)test-environment-config.yaml 2>&1) || { echo "❌ Render failed"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "postInitApplicationSQL:" \
+		|| { echo "❌ Expected 'postInitApplicationSQL:' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "CREATE EXTENSION IF NOT EXISTS vector" \
+		|| { echo "❌ Expected 'CREATE EXTENSION IF NOT EXISTS vector' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "CREATE EXTENSION IF NOT EXISTS pg_trgm" \
+		|| { echo "❌ Expected 'CREATE EXTENSION IF NOT EXISTS pg_trgm' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "postInitSQL:" \
+		&& { echo "❌ Regression: 'postInitSQL' used instead of 'postInitApplicationSQL' - extensions would land in the postgres db, not the app db"; echo "$$OUTPUT"; exit 1; }; \
+	echo "✅ pgvector render-check passed!"
 
 clean: ## Clean up any generated files
 	@echo "🧹 Cleaning up postgres test artifacts..."

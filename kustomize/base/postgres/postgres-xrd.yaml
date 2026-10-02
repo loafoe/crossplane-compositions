@@ -166,6 +166,14 @@ spec:
                     type: string
                     description: "StorageClass to use for CNPG PVC provisioning. Required for VolumeSnapshot support (must be backed by a CSI driver that supports snapshots)."
 
+                  # Postgres extensions (CNPG only)
+                  extensions:
+                    type: array
+                    description: "CNPG only. Extensions to CREATE at initdb time via postInitApplicationSQL (e.g. 'vector', 'pg_trgm'). Only applies to a fresh Cluster bootstrap, not to restore/recovery or to clusters that already exist - CNPG has no reliable declarative way to add an extension to a live Cluster. Ignored by the aws provider."
+                    items:
+                      type: string
+                      pattern: '^[a-zA-Z_][a-zA-Z0-9_]*$'
+
                   vpa:
                     type: object
                     description: "Vertical Pod Autoscaler configuration for automatic resource right-sizing."

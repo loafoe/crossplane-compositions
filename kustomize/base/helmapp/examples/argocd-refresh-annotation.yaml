@@ -1,0 +1,19 @@
+apiVersion: dip.io/v1alpha1
+kind: HelmApplication
+metadata:
+  name: argocd-refresh-annotation
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/refresh: "hard"
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: "default"
+  source:
+    repoURL: "oci://ghcr.io/loafoe/helm-charts/go-hello-world"
+    targetRevision: "0.15.0"
+    helm:
+      valuesObject:
+        replicaCount: 1
+  # argocd.argoproj.io/refresh must NOT be propagated to the composed Application:
+  # ArgoCD deletes it after processing, so re-adding it every reconcile causes an
+  # infinite refresh loop. argocd.argoproj.io/sync-wave must still be propagated.

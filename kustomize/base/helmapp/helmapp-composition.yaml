@@ -74,7 +74,13 @@ spec:
             annotations:
               gotemplating.fn.crossplane.io/composition-resource-name: argocd-app
               {{- range $key, $value := .observed.composite.resource.metadata.annotations }}
+              {{- /* argocd.argoproj.io/refresh is deleted by ArgoCD itself once it acts on it.
+                     Propagating it here means Crossplane re-adds what ArgoCD just removed every
+                     reconcile, looping forever. Other argocd.argoproj.io/* annotations (e.g.
+                     sync-wave) are not self-clearing and must still be propagated. */}}
+              {{- if ne $key "argocd.argoproj.io/refresh" }}
               {{ $key }}: {{ include "substituteVars" (dict "value" $value "env" $env "supportedVars" $supportedEnvVars) | quote }}
+              {{- end }}
               {{- end }}
             finalizers:
             - resources-finalizer.argocd.argoproj.io

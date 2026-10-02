@@ -78,6 +78,7 @@ spec:
           {{- $enableSnapshots := $xr.spec.parameters.enableSnapshots | default false }}
           {{- $snapshotClassName := $xr.spec.parameters.snapshotClassName | default "default" }}
           {{- $storageClassName := $xr.spec.parameters.storageClassName | default "" }}
+          {{- $extensions := $xr.spec.parameters.extensions | default list }}
 
           {{- /* VPA Configuration */ -}}
           {{- $vpaEnabled := false }}
@@ -229,6 +230,18 @@ spec:
                 owner: {{ $dbMasterUsername | default "app" }}
                 secret:
                   name: {{ $dbMasterPasswordSecret.name }}
+                {{- if $extensions }}
+                # postInitApplicationSQL (not postInitSQL) runs against the
+                # application database above - postInitSQL runs against the
+                # postgres database instead and would leave it unreachable
+                # by the app. spec.postgresql.extensions is NOT used here:
+                # CNPG 1.30.1 silently ignores it (verified on rpi), both at
+                # bootstrap and when added to a running Cluster.
+                postInitApplicationSQL:
+                  {{- range $ext := $extensions }}
+                  - "CREATE EXTENSION IF NOT EXISTS {{ $ext }}"
+                  {{- end }}
+                {{- end }}
               {{- end }}
 
             {{- if eq $restoreMethod "barmanObjectStore" }}

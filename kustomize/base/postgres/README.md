@@ -227,6 +227,7 @@ spec:
 | `multiAz` | No | `false` | Enable Multi-AZ deployment |
 | `vpa.enabled` | No | `false` | Enable VPA for automatic resource right-sizing (CNPG only) |
 | `vpa.updateMode` | No | `Off` | VPA update mode: `Off`, `Initial`, or `Auto` |
+| `extensions` | No | - | Postgres extensions to create at bootstrap, e.g. `[vector, pg_trgm]` (CNPG only) |
 
 **Note:** VPC configuration (subnets and security groups) is automatically extracted from the `environmentConfig` resource. The composition uses the database subnet group and database security group defined in the environment configuration.
 
@@ -282,6 +283,39 @@ spec:
 ```bash
 kubectl get vpa -n <namespace> -o custom-columns='NAME:.metadata.name,TARGET_MEM:.status.recommendation.containerRecommendations[0].target.memory,TARGET_CPU:.status.recommendation.containerRecommendations[0].target.cpu'
 ```
+
+### Postgres Extensions (CNPG only)
+
+`extensions` lists extensions to `CREATE` at bootstrap time, in the application database (`databaseName`):
+
+```yaml
+apiVersion: dip.io/v1alpha1
+kind: Postgres
+metadata:
+  name: myapp-db
+  namespace: default
+spec:
+  crossplane:
+    compositionSelector:
+      matchLabels:
+        provider: cnpg
+  parameters:
+    size: small
+    masterUsername: postgres
+    identifier: myapp
+    databaseName: app
+    extensions:
+      - vector
+      - pg_trgm
+```
+
+**This only applies to a fresh Cluster's initdb bootstrap.** It does nothing for restore/recovery and cannot add an extension to a Cluster that already exists — CNPG (verified on operator 1.30.1) has no reliable declarative way to do either:
+
+- `spec.postgresql.extensions` is silently ignored, both at bootstrap and when added to a running Cluster — no error, no event, no condition change.
+- The composition instead renders `bootstrap.initdb.postInitApplicationSQL`, which runs once against the application database during initdb. Don't confuse this with `postInitSQL`, which runs against the `postgres` database and would leave `app` without the extension.
+- An extension that needs `shared_preload_libraries` (e.g. `pgaudit`) will fail the entire initdb if listed here; this composition does not set `shared_preload_libraries`.
+
+Ignored by the `aws` provider.
 
 ## Connecting to the Database
 

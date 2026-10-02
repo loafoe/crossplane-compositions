@@ -1,0 +1,24 @@
+apiVersion: dip.io/v1alpha1
+kind: Postgres
+metadata:
+  name: myapp-pgvector-db
+  namespace: default
+spec:
+  writeConnectionSecretToRef:
+    name: myapp-pgvector-db-connection
+    namespace: default
+  crossplane:
+    compositionSelector:
+      matchLabels:
+        provider: cnpg
+  parameters:
+    size: small
+    masterUsername: "postgres"
+    identifier: myapp-pgvector
+    databaseName: app
+    engineVersion: "18.1"
+    allocatedStorage: 5
+    multiAz: false
+    extensions:
+      - vector
+      - pg_trgm

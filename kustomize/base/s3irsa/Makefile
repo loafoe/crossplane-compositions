@@ -15,7 +15,7 @@ help: ## Show this help message
 	@echo 'Available targets:'
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-15s %s\n", $$1, $$2}'
 
-test: validate render ## Run all tests (validate + render)
+test: validate render connection-secret ## Run all tests (validate + render + connection-secret)
 	@echo "✅ All s3irsa tests passed!"
 
 validate: ## Validate the composition and XRD using crossplane beta validate
@@ -41,6 +41,24 @@ render: ## Render compositions with example S3IRSA resources
 	done
 	@echo ""
 	@echo "✅ All examples rendered successfully!"
+
+# Downstream charts (loki/mimir/tempo-bootstrap) read these keys; removing one is a breaking change.
+CONNECTION_SECRET_KEYS := arn,bucketName,id,region
+
+connection-secret: ## Assert the connection secret exposes the published key set
+	@echo "🔑 Checking S3IRSA connection secret keys..."
+	@keys=$$(crossplane render \
+		$(BASE_DIR)test/connection-secret-xr.yaml \
+		$(BASE_DIR)s3irsa-composition.yaml \
+		$(BASE_DIR)functions-only.yaml \
+		--xrd=$(BASE_DIR)s3irsa-xrd.yaml \
+		--required-resources=$(BASE_DIR)test-environment-config.yaml \
+		--observed-resources=$(BASE_DIR)test/connection-secret-observed.yaml \
+		| yq ea 'select(.kind == "Secret") | .data | keys | sort | join(",")') || exit 1; \
+	if [ "$$keys" != "$(CONNECTION_SECRET_KEYS)" ]; then \
+		echo "❌ connection secret keys: got '$$keys', want '$(CONNECTION_SECRET_KEYS)'"; exit 1; \
+	fi
+	@echo "✅ Connection secret keys: $(CONNECTION_SECRET_KEYS)"
 
 clean: ## Clean up any generated files
 	@echo "🧹 Cleaning up s3irsa test artifacts..."

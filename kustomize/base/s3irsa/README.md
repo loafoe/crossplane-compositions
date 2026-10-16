@@ -257,6 +257,17 @@ The composition populates the following status fields:
 | `bucketArn` | ARN of the S3 bucket |
 | `roleArn` | ARN of the IAM role created for IRSA |
 
+## Connection Secret Keys
+
+When `writeConnectionSecretToRef` is set, the secret contains:
+
+| Key | Description |
+|-----|-------------|
+| `bucketName` | Name of the S3 bucket |
+| `id` | Name of the S3 bucket (same as `bucketName`; kept for consumers of the original key set) |
+| `arn` | ARN of the S3 bucket |
+| `region` | AWS region of the bucket |
+
 ## KMS Encryption Strategy
 
 The composition uses an efficient KMS encryption approach:

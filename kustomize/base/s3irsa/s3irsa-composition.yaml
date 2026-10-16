@@ -414,6 +414,16 @@ spec:
         - type: FromFieldPath
           fromFieldPath: status.atProvider.id
           name: bucketName
+        # id/arn/region mirror the keys the Bucket MR used to write itself; consumers read key "id"
+        - type: FromFieldPath
+          fromFieldPath: status.atProvider.id
+          name: id
+        - type: FromFieldPath
+          fromFieldPath: status.atProvider.arn
+          name: arn
+        - type: FromFieldPath
+          fromFieldPath: status.atProvider.region
+          name: region
         patches:
         - type: ToCompositeFieldPath
           fromFieldPath: status.atProvider.id

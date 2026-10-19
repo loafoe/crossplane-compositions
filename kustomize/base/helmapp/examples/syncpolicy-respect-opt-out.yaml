@@ -1,0 +1,15 @@
+apiVersion: dip.io/v1alpha1
+kind: HelmApplication
+metadata:
+  name: syncpolicy-respect-opt-out
+  namespace: argocd
+spec:
+  project: "default"
+  source:
+    repoURL: "oci://ghcr.io/loafoe/helm-charts/go-hello-world"
+    targetRevision: "0.15.0"
+  # Setting RespectIgnoreDifferences either way stops the composition adding it
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+      - RespectIgnoreDifferences=false

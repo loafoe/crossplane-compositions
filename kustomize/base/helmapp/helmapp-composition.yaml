@@ -89,8 +89,15 @@ spec:
             {{- if .observed.composite.resource.spec.revisionHistoryLimit }}
             revisionHistoryLimit: {{ .observed.composite.resource.spec.revisionHistoryLimit }}
             {{- end }}
-            {{- if .observed.composite.resource.spec.ignoreDifferences }}
             ignoreDifferences:
+            # Argo CD >= 3.3 adds these finalizers to child Applications whose chart has
+            # pre/post-delete hooks, so any app-of-apps would flap OutOfSync
+            # (argoproj/argo-cd#27533). User entries are appended below.
+            - group: "argoproj.io"
+              kind: Application
+              jqPathExpressions:
+              - '.metadata.finalizers[]? | select(startswith("pre-delete-finalizer.argocd.argoproj.io"))'
+              - '.metadata.finalizers[]? | select(startswith("post-delete-finalizer.argocd.argoproj.io"))'
             {{- range .observed.composite.resource.spec.ignoreDifferences }}
             - kind: {{ .kind }}
               {{- if .group }}
@@ -120,7 +127,6 @@ spec:
               - {{ . }}
               {{- end }}
               {{- end }}
-            {{- end }}
             {{- end }}
             source:
               {{- $repoURL := include "substituteVars" (dict "value" .observed.composite.resource.spec.source.repoURL "env" $env "supportedVars" $supportedEnvVars) }}
@@ -284,6 +290,15 @@ spec:
               {{- $destNs = default .observed.composite.resource.metadata.namespace .observed.composite.resource.spec.destination.namespace }}
               {{- end }}
               namespace: {{ include "substituteVars" (dict "value" $destNs "env" $env "supportedVars" $supportedEnvVars) }}
+            {{- $syncOptions := list "CreateNamespace=true" }}
+            {{- if and .observed.composite.resource.spec.syncPolicy .observed.composite.resource.spec.syncPolicy.syncOptions }}
+            {{- $syncOptions = .observed.composite.resource.spec.syncPolicy.syncOptions }}
+            {{- end }}
+            {{- $respectSet := false }}
+            {{- range $syncOptions }}{{ if hasPrefix "RespectIgnoreDifferences=" . }}{{ $respectSet = true }}{{ end }}{{ end }}
+            {{- if not $respectSet }}
+            {{- $syncOptions = append $syncOptions "RespectIgnoreDifferences=true" }}
+            {{- end }}
             syncPolicy:
               {{- if .observed.composite.resource.spec.syncPolicy }}
               {{- $syncPolicy := .observed.composite.resource.spec.syncPolicy }}
@@ -325,23 +340,16 @@ spec:
                   maxDuration: {{ default "3m" $syncPolicy.retry.backoff.maxDuration | quote }}
                 {{- end }}
               {{- end }}
-              {{- if $syncPolicy.syncOptions }}
-              syncOptions:
-              {{- range $syncPolicy.syncOptions }}
-              - {{ . }}
-              {{- end }}
-              {{- else }}
-              syncOptions:
-              - CreateNamespace=true
-              {{- end }}
               {{- else }}
               automated:
                 prune: true
                 selfHeal: true
                 allowEmpty: false
                 enabled: true
+              {{- end }}
               syncOptions:
-              - CreateNamespace=true
+              {{- range $syncOptions }}
+              - {{ . }}
               {{- end }}
   
   - step: patch-and-transform

@@ -1,0 +1,25 @@
+apiVersion: dip.io/v1alpha1
+kind: HelmApplication
+metadata:
+  name: ignoredifferences-merge
+  namespace: argocd
+spec:
+  project: "default"
+  source:
+    repoURL: "oci://ghcr.io/loafoe/helm-charts/go-hello-world"
+    targetRevision: "0.15.0"
+  # User entries are appended after the built-in delete-hook finalizer entry
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
+    - group: argoproj.io
+      kind: Application
+      jqPathExpressions:
+        - '.spec.source.helm.valuesObject.replicaCount'
+  # RespectIgnoreDifferences=true is appended to these
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

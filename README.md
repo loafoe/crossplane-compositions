@@ -48,6 +48,8 @@ Defines the `HelmApplication` resource with the following inputs:
 | `source.helm.releaseName` | string | No | Helm release name (defaults to the HelmApplication resource name) |
 | `source.helm.valuesObject` | object | No | Helm chart values as key-value pairs |
 | `source.withConfigKeys` | array | No | Optional array of string prefixes to filter which environmentConfigs to include |
+| `ignoreDifferences` | array | No | Argo CD ignoreDifferences entries, appended after the built-in delete-hook finalizer entry |
+| `syncPolicy.syncOptions` | array | No | Argo CD sync options (defaults to `CreateNamespace=true`); `RespectIgnoreDifferences=true` is added unless set explicitly |
 
 ### 2. Composition - `helmapp-composition.yaml`
 
@@ -58,6 +60,10 @@ Implements the XRD by creating an Argo CD `Application` resource. The compositio
 - Merges `source.helm.valuesObject` with `environmentConfig` in the Helm values
 - Filters environmentConfig keys based on `source.withConfigKeys` if specified
 - Sets up automated sync policies for Argo CD
+- Always ignores the `pre-delete-finalizer.argocd.argoproj.io` / `post-delete-finalizer.argocd.argoproj.io`
+  finalizers Argo CD (3.3+) adds to child Applications whose chart has delete hooks, so app-of-apps
+  charts don't flap OutOfSync ([argoproj/argo-cd#27533](https://github.com/argoproj/argo-cd/issues/27533)).
+  `RespectIgnoreDifferences=true` keeps a sync from stripping them; pass `RespectIgnoreDifferences=false` to opt out
 - Supports both traditional Helm repositories and OCI registries
 - Conditionally sets `spec.chart` only for non-OCI repositories
 

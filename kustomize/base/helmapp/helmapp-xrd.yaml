@@ -98,7 +98,7 @@ spec:
               # Ignore differences configuration
               ignoreDifferences:
                 type: array
-                description: "Ignore differences between live and desired states during the diff"
+                description: "Ignore differences between live and desired states during the diff. Appended after a built-in entry that ignores the pre/post-delete hook finalizers Argo CD adds to child Applications"
                 items:
                   type: object
                   properties:
@@ -206,7 +206,7 @@ spec:
                             default: "3m"
                   syncOptions:
                     type: array
-                    description: "Sync options"
+                    description: "Sync options. RespectIgnoreDifferences=true is added unless set explicitly"
                     items:
                       type: string
                     default:

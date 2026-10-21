@@ -104,11 +104,6 @@ spec:
                  (no IAM Role, no IRSA annotation); absent = AWS IRSA. endpointURL is
                  orthogonal and may be set in either mode. */ -}}
           {{- $barmanUseIAMRole := true }}
-          {{- /* Cluster-wide fallbacks from the EnvironmentConfig, for object stores
-                 that every cluster in this environment shares (a homelab S3 on the
-                 LAN, say). Per-cluster XR parameters win over both. */ -}}
-          {{- $barmanEnvEndpointURL := index $env "barmanEndpointURL" | default "" }}
-          {{- $barmanEnvCredentialsSecretName := index $env "barmanCredentialsSecretName" | default "" }}
           {{- if $xr.spec.parameters.barmanBackup }}
             {{- $barmanEnabled = $xr.spec.parameters.barmanBackup.enabled | default false }}
             {{- if $xr.spec.parameters.barmanBackup.bucketName }}
@@ -122,15 +117,10 @@ spec:
             {{- $barmanSchedule = $xr.spec.parameters.barmanBackup.scheduleBaseBackup | default "0 0 0 * * *" }}
             {{- if $xr.spec.parameters.barmanBackup.endpointURL }}
               {{- $barmanEndpointURL = $xr.spec.parameters.barmanBackup.endpointURL }}
-            {{- else if $barmanEnvEndpointURL }}
-              {{- $barmanEndpointURL = $barmanEnvEndpointURL }}
             {{- end }}
             {{- if $xr.spec.parameters.barmanBackup.credentialsSecretRef }}
               {{- $barmanUseIAMRole = false }}
               {{- $barmanCredentialsSecret = $xr.spec.parameters.barmanBackup.credentialsSecretRef }}
-            {{- else if $barmanEnvCredentialsSecretName }}
-              {{- $barmanUseIAMRole = false }}
-              {{- $barmanCredentialsSecret = dict "name" $barmanEnvCredentialsSecretName }}
             {{- end }}
             {{- if $xr.spec.parameters.barmanBackup.serverName }}
               {{- $barmanServerName = $xr.spec.parameters.barmanBackup.serverName }}

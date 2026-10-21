@@ -1,0 +1,26 @@
+apiVersion: dip.io/v1alpha1
+kind: Postgres
+metadata:
+  name: example-db-envconfig
+  namespace: test-namespace
+  labels:
+    provider: cnpg
+spec:
+  crossplane:
+    compositionSelector:
+      matchLabels:
+        provider: cnpg
+  parameters:
+    identifier: example-db-envconfig
+    databaseName: myapp
+    masterUsername: myapp
+    size: small
+    allocatedStorage: 20
+    enableSnapshots: true
+    snapshotClassName: csi-snapclass
+    barmanBackup:
+      enabled: true
+      retentionDays: 7
+      # No endpointURL and no credentialsSecretRef: both come from the
+      # EnvironmentConfig (see test-environment-config-barman.yaml). This is
+      # the path a chart that only forwards barmanBackup.enabled can use.

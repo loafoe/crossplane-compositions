@@ -15,7 +15,7 @@ help: ## Show this help message
 	@echo 'Available targets:'
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-15s %s\n", $$1, $$2}'
 
-test: validate render render-check render-check-no-backups test-restore-from-volumesnapshot test-barman-backup test-barman-s3compatible test-barman-restore test-pgvector ## Run all tests (validate + render + snapshot assertions)
+test: validate render render-check render-check-no-backups test-restore-from-volumesnapshot test-barman-backup test-barman-s3compatible test-barman-envconfig test-barman-restore test-pgvector ## Run all tests (validate + render + snapshot assertions)
 	@echo "✅ All postgres tests passed!"
 
 validate: ## Validate the composition and XRD using crossplane beta validate
@@ -202,6 +202,30 @@ test-barman-s3compatible: ## Assert rendered output for cnpg-barman-s3compatible
 	echo "$$OUTPUT" | grep -q "method: plugin" \
 		|| { echo "❌ Expected 'method: plugin' not found in ScheduledBackup"; echo "$$OUTPUT"; exit 1; }; \
 	echo "✅ S3-compatible Barman render-check passed!"
+
+test-barman-envconfig: ## Assert the EnvironmentConfig supplies endpointURL + credentials when the XR does not
+	@echo "🔍 Checking rendered output for EnvironmentConfig-driven Barman configuration..."
+	@OUTPUT=$$(crossplane render \
+		$(BASE_DIR)examples/cnpg-barman-envconfig.yaml \
+		$(BASE_DIR)postgres-composition-cnpg.yaml \
+		$(BASE_DIR)functions-only.yaml \
+		--xrd=$(BASE_DIR)postgres-xrd.yaml \
+		--required-resources=$(BASE_DIR)test-environment-config-barman.yaml 2>&1) || { echo "❌ Render failed"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "kind: ObjectStore" \
+		|| { echo "❌ Expected 'kind: ObjectStore' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "endpointURL: http://192.0.2.10:9000" \
+		|| { echo "❌ Expected the endpointURL from the EnvironmentConfig not found - the env fallback is not wired up"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "name: cnpg-s3-creds" \
+		|| { echo "❌ Expected the credentials Secret name from the EnvironmentConfig not found"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "accessKeyId:" \
+		|| { echo "❌ Expected 'accessKeyId:' not found - env-supplied credentials must select static-key mode"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "inheritFromIAMRole" \
+		&& { echo "❌ Regression: 'inheritFromIAMRole' present - the EnvironmentConfig credentials must suppress it"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -qE "^kind: Role$$" \
+		&& { echo "❌ Regression: IAM Role rendered - a cluster with no AWS provider cannot compose it"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "serviceAccountTemplate:" \
+		&& { echo "❌ Regression: 'serviceAccountTemplate:' rendered - must be omitted in static-credential mode"; echo "$$OUTPUT"; exit 1; }; \
+	echo "✅ EnvironmentConfig-driven Barman render-check passed!"
 
 test-barman-restore: ## Assert rendered output of cnpg-barman-restore contains plugin-based externalClusters and recovery bootstrap
 	@echo "🔍 Checking rendered output for Barman restore configuration (plugin-based)..."

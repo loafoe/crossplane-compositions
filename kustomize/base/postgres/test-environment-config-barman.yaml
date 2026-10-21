@@ -1,0 +1,26 @@
+apiVersion: apiextensions.crossplane.io/v1beta1
+kind: EnvironmentConfig
+metadata:
+  name: hsp-addons-compat
+  labels:
+    config: dip-software
+data:
+  resourcePrefix: "test-cluster"
+  region: "eu-west-2"
+  clusterFqdn: "internal.example.com"
+  oidcProvider: ""
+  oidcProviderArn: ""
+---
+# Second EnvironmentConfig with the same label. The composition loads
+# EnvironmentConfigs with `mode: Multiple`, so the data of every match is
+# merged into one map - this is how a cluster-wide object store is supplied
+# to clusters whose chart cannot pass per-cluster parameters.
+apiVersion: apiextensions.crossplane.io/v1beta1
+kind: EnvironmentConfig
+metadata:
+  name: example-barman
+  labels:
+    config: dip-software
+data:
+  barmanEndpointURL: "http://192.0.2.10:9000"
+  barmanCredentialsSecretName: "cnpg-s3-creds"

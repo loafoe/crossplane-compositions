@@ -95,6 +95,15 @@ spec:
           {{- $barmanRetentionDays := 7 }}
           {{- $barmanCompression := "gzip" }}
           {{- $barmanSchedule := "0 0 0 * * *" }}
+          {{- /* S3-compatible (non-AWS) object store support. */ -}}
+          {{- $barmanEndpointURL := "" }}
+          {{- $barmanCredentialsSecret := dict }}
+          {{- $barmanServerName := printf "%s-wal" $targetIdentifier }}
+          {{- $barmanMaxParallel := 4 }}
+          {{- /* Credential mode is chosen by credentialsSecretRef: present = static keys
+                 (no IAM Role, no IRSA annotation); absent = AWS IRSA. endpointURL is
+                 orthogonal and may be set in either mode. */ -}}
+          {{- $barmanUseIAMRole := true }}
           {{- if $xr.spec.parameters.barmanBackup }}
             {{- $barmanEnabled = $xr.spec.parameters.barmanBackup.enabled | default false }}
             {{- if $xr.spec.parameters.barmanBackup.bucketName }}
@@ -106,6 +115,19 @@ spec:
             {{- $barmanRetentionDays = $xr.spec.parameters.barmanBackup.retentionDays | default 7 }}
             {{- $barmanCompression = $xr.spec.parameters.barmanBackup.compression | default "gzip" }}
             {{- $barmanSchedule = $xr.spec.parameters.barmanBackup.scheduleBaseBackup | default "0 0 0 * * *" }}
+            {{- if $xr.spec.parameters.barmanBackup.endpointURL }}
+              {{- $barmanEndpointURL = $xr.spec.parameters.barmanBackup.endpointURL }}
+            {{- end }}
+            {{- if $xr.spec.parameters.barmanBackup.credentialsSecretRef }}
+              {{- $barmanUseIAMRole = false }}
+              {{- $barmanCredentialsSecret = $xr.spec.parameters.barmanBackup.credentialsSecretRef }}
+            {{- end }}
+            {{- if $xr.spec.parameters.barmanBackup.serverName }}
+              {{- $barmanServerName = $xr.spec.parameters.barmanBackup.serverName }}
+            {{- end }}
+            {{- if $xr.spec.parameters.barmanBackup.maxParallel }}
+              {{- $barmanMaxParallel = $xr.spec.parameters.barmanBackup.maxParallel }}
+            {{- end }}
           {{- end }}
           {{- $barmanDestinationPath := printf "s3://%s/%s" $barmanBucketName $barmanBucketPrefix }}
           {{- /* Skip barman backup config during recovery from barman - the destination is the recovery source */ -}}
@@ -178,8 +200,13 @@ spec:
           spec:
             instances: {{ $cnpgInstances }}
 
-            {{- if $barmanEnabled }}
-            # Service account with IRSA annotation for S3 access
+            {{- if and $barmanEnabled $barmanUseIAMRole }}
+            # Service account with IRSA annotation for S3 access.
+            # Only for the AWS IRSA credential mode. With barmanBackup.credentialsSecretRef
+            # (static keys - required for any non-AKS cluster and for S3-compatible
+            # stores that are not AWS S3) this is omitted entirely: there is no IAM
+            # role to assume and the annotation would point at a role that does not
+            # exist, which fails the credential lookup rather than falling back.
             serviceAccountTemplate:
               metadata:
                 annotations:
@@ -201,6 +228,12 @@ spec:
                 isWALArchiver: true
                 parameters:
                   barmanObjectName: {{ $targetIdentifier }}-backup
+                  # serverName is the prefix under the bucket prefix where THIS
+                  # cluster's WALs and base backups are written. The ObjectStore
+                  # CRD forbids serverName (its CEL rule points here), and CNPG
+                  # refuses to recover into a server whose archive is not empty,
+                  # so it must differ from the restore source server name.
+                  serverName: {{ $barmanServerName }}
             {{- end }}
 
             # Bootstrap configuration
@@ -441,20 +474,41 @@ spec:
           spec:
             configuration:
               destinationPath: {{ $barmanDestinationPath }}
+              {{- if $barmanEndpointURL }}
+              # S3-compatible endpoint (RustFS, MinIO, Garage, ...). Omitted for
+              # AWS S3, where the default endpoint is correct.
+              endpointURL: {{ $barmanEndpointURL }}
+              {{- end }}
               s3Credentials:
+                {{- if $barmanUseIAMRole }}
                 inheritFromIAMRole: true
+                {{- else }}
+                # Static credentials from a Secret that is created out of band.
+                # The composition never creates or reads it - only references it.
+                accessKeyId:
+                  name: {{ $barmanCredentialsSecret.name }}
+                  key: {{ $barmanCredentialsSecret.accessKeyIdKey | default "ACCESS_KEY_ID" }}
+                secretAccessKey:
+                  name: {{ $barmanCredentialsSecret.name }}
+                  key: {{ $barmanCredentialsSecret.secretAccessKeyKey | default "ACCESS_SECRET_KEY" }}
+                {{- end }}
               wal:
                 compression: {{ $barmanCompression }}
-                maxParallel: 4
+                maxParallel: {{ $barmanMaxParallel }}
               data:
                 compression: {{ $barmanCompression }}
             retentionPolicy: "{{ $barmanRetentionDays }}d"
           {{- end }}
 
-          {{- if $barmanEnabled }}
+          {{- if and $barmanEnabled $barmanUseIAMRole }}
           ---
           # IAM Role for CNPG backup to S3 via IRSA
           # Uses wildcard trust to allow any postgres service account in this namespace
+          #
+          # Only rendered in the AWS IRSA credential mode. With
+          # barmanBackup.credentialsSecretRef (static keys) these are omitted:
+          # a cluster with no AWS provider cannot compose iam.aws.m.upbound.io
+          # resources at all, so rendering them would fail the whole composition.
           apiVersion: iam.aws.m.upbound.io/v1beta1
           kind: Role
           metadata:

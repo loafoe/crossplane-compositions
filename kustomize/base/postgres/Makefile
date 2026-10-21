@@ -15,7 +15,7 @@ help: ## Show this help message
 	@echo 'Available targets:'
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-15s %s\n", $$1, $$2}'
 
-test: validate render render-check render-check-no-backups test-restore-from-volumesnapshot test-barman-backup test-barman-restore test-pgvector ## Run all tests (validate + render + snapshot assertions)
+test: validate render render-check render-check-no-backups test-restore-from-volumesnapshot test-barman-backup test-barman-s3compatible test-barman-restore test-pgvector ## Run all tests (validate + render + snapshot assertions)
 	@echo "✅ All postgres tests passed!"
 
 validate: ## Validate the composition and XRD using crossplane beta validate
@@ -79,6 +79,10 @@ render-check-no-backups: ## Regression: cnpg-minimal (no snapshots/barman) must 
 		&& { echo "❌ Unexpected 'kind: ScheduledBackup' — minimal example must not render backups"; echo "$$OUTPUT"; exit 1; }; \
 	echo "$$OUTPUT" | grep -q "kind: ObjectStore" \
 		&& { echo "❌ Unexpected 'kind: ObjectStore' — minimal example must not render barman"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "serviceAccountTemplate:" \
+		&& { echo "❌ Regression: 'serviceAccountTemplate:' rendered with backups disabled - the IRSA annotation is an AWS-barman-only artefact"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "eks.amazonaws.com/role-arn" \
+		&& { echo "❌ Regression: IRSA annotation rendered with backups disabled"; echo "$$OUTPUT"; exit 1; }; \
 	echo "✅ No-backups render-check passed!"
 
 test-restore-from-volumesnapshot: ## Assert rendered output of cnpg-restore-from-volumesnapshot uses volumeSnapshots bootstrap
@@ -143,7 +147,61 @@ test-barman-backup: ## Assert rendered output of cnpg-barman-backup contains plu
 		|| { echo "❌ Expected 'pluginConfiguration:' not found in ScheduledBackup"; echo "$$OUTPUT"; exit 1; }; \
 	echo "$$OUTPUT" | grep -q "compression: gzip" \
 		|| { echo "❌ Expected 'compression: gzip' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "serverName: myapp-with-barman-wal" \
+		|| { echo "❌ Expected the default WAL archiver serverName ('<identifier>-wal') not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "endpointURL" \
+		&& { echo "❌ Regression: 'endpointURL' present - the AWS path must target AWS S3, not a custom endpoint"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "maxParallel: 4" \
+		|| { echo "❌ Expected the default 'maxParallel: 4' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
 	echo "✅ Barman backup render-check passed!"
+
+test-barman-s3compatible: ## Assert rendered output for cnpg-barman-s3compatible uses static creds + custom endpointURL and renders NO AWS IAM resources
+	@echo "🔍 Checking rendered output for S3-compatible (non-AWS) Barman configuration..."
+	@OUTPUT=$$(crossplane render \
+		$(BASE_DIR)examples/cnpg-barman-s3compatible.yaml \
+		$(BASE_DIR)postgres-composition-cnpg.yaml \
+		$(BASE_DIR)functions-only.yaml \
+		--xrd=$(BASE_DIR)postgres-xrd.yaml \
+		--required-resources=$(BASE_DIR)test-environment-config.yaml 2>&1) || { echo "❌ Render failed"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "kind: ObjectStore" \
+		|| { echo "❌ Expected 'kind: ObjectStore' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "apiVersion: barmancloud.cnpg.io/v1" \
+		|| { echo "❌ Expected 'apiVersion: barmancloud.cnpg.io/v1' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "endpointURL: http://192.0.2.10:9000" \
+		|| { echo "❌ Expected the custom S3 endpointURL not found in rendered output - without it barman targets AWS S3"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "accessKeyId:" \
+		|| { echo "❌ Expected 'accessKeyId:' not found - static credentials must be used for a non-AWS store"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "name: cnpg-s3-creds" \
+		|| { echo "❌ Expected the referenced credentials Secret name not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "key: ACCESS_KEY_ID" \
+		|| { echo "❌ Expected 'key: ACCESS_KEY_ID' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "secretAccessKey:" \
+		|| { echo "❌ Expected 'secretAccessKey:' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "key: ACCESS_SECRET_KEY" \
+		|| { echo "❌ Expected 'key: ACCESS_SECRET_KEY' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "inheritFromIAMRole" \
+		&& { echo "❌ Regression: 'inheritFromIAMRole' present - static-credential mode must not also ask for an IAM role"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -qE "^kind: Role$$" \
+		&& { echo "❌ Regression: IAM Role rendered - a cluster with no AWS provider cannot compose iam.aws.m.upbound.io resources"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -qE "^kind: Policy$$" \
+		&& { echo "❌ Regression: IAM Policy rendered - must be omitted in static-credential mode"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -qE "^kind: RolePolicyAttachment$$" \
+		&& { echo "❌ Regression: IAM RolePolicyAttachment rendered - must be omitted in static-credential mode"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "eks.amazonaws.com/role-arn" \
+		&& { echo "❌ Regression: IRSA annotation rendered - there is no IAM role to assume in static-credential mode"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "serviceAccountTemplate:" \
+		&& { echo "❌ Regression: 'serviceAccountTemplate:' rendered - must be omitted in static-credential mode"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "serverName: myapp-with-barman-s3-wal" \
+		|| { echo "❌ Expected the WAL archiver serverName not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "isWALArchiver: true" \
+		|| { echo "❌ Expected 'isWALArchiver: true' not found - without it nothing archives the WAL"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "maxParallel: 2" \
+		|| { echo "❌ Expected 'maxParallel: 2' not found - the requested parallelism was not honoured"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "retentionPolicy: 14d" \
+		|| { echo "❌ Expected 'retentionPolicy: 14d' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "method: plugin" \
+		|| { echo "❌ Expected 'method: plugin' not found in ScheduledBackup"; echo "$$OUTPUT"; exit 1; }; \
+	echo "✅ S3-compatible Barman render-check passed!"
 
 test-barman-restore: ## Assert rendered output of cnpg-barman-restore contains plugin-based externalClusters and recovery bootstrap
 	@echo "🔍 Checking rendered output for Barman restore configuration (plugin-based)..."
@@ -167,6 +225,10 @@ test-barman-restore: ## Assert rendered output of cnpg-barman-restore contains p
 		|| { echo "❌ Expected 'barmanObjectName: restored-from-barman-backup' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
 	echo "$$OUTPUT" | grep -q "serverName: restored-from-barman" \
 		|| { echo "❌ Expected 'serverName: restored-from-barman' not found in rendered output"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "isWALArchiver" \
+		&& { echo "❌ Regression: a live WAL archiver was rendered during a barman restore - the archive it would write to is the one being recovered from"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "kind: ObjectStore" \
+		&& { echo "❌ Regression: an ObjectStore was rendered during a barman restore - the destination is the recovery source"; echo "$$OUTPUT"; exit 1; }; \
 	echo "✅ Barman restore render-check passed!"
 
 test-pgvector: ## Assert rendered output of cnpg-pgvector uses postInitApplicationSQL (not postInitSQL) to CREATE EXTENSION

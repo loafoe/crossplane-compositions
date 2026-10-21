@@ -1,0 +1,38 @@
+apiVersion: dip.io/v1alpha1
+kind: Postgres
+metadata:
+  name: myapp-with-barman-s3
+  namespace: test-namespace
+  labels:
+    provider: cnpg
+spec:
+  crossplane:
+    compositionSelector:
+      matchLabels:
+        provider: cnpg
+  parameters:
+    identifier: myapp-with-barman-s3
+    databaseName: myapp
+    masterUsername: myapp
+    size: small
+    allocatedStorage: 20
+    storageClassName: nfs-csi
+    enableSnapshots: true
+    snapshotClassName: csi-snapclass
+    barmanBackup:
+      enabled: true
+      retentionDays: 14
+      compression: gzip
+      # S3-compatible store that is not AWS S3. Omit for AWS S3.
+      endpointURL: http://192.0.2.10:9000
+      # Static credentials from a Secret created out of band. Its presence also
+      # selects the static-key credential mode, which suppresses the AWS IAM
+      # Role/Policy/RolePolicyAttachment and the IRSA service account annotation.
+      credentialsSecretRef:
+        name: cnpg-s3-creds
+      # Barman server name for ongoing WAL archiving. Defaults to
+      # '<identifier>-wal'; must differ from the restore source server name.
+      serverName: myapp-with-barman-s3-wal
+      # Lower than the default 4 on small ARM hosts - each job is another
+      # concurrent upload against the object store.
+      maxParallel: 2

@@ -475,23 +475,85 @@ This automatically:
 2. Configures continuous WAL archiving to S3
 3. Creates a `ScheduledBackup` for daily base backups at midnight
 
+#### Using an S3-compatible store (RustFS, MinIO, Garage, ...)
+
+The AWS IRSA path above is the default. Two parameters switch it to a
+self-hosted, S3-compatible object store:
+
+- **`endpointURL`** — the store's endpoint. Omit it for AWS S3.
+- **`credentialsSecretRef`** — a Secret holding static access keys. **Its
+  presence selects the static-key credential mode**, which suppresses the IAM
+  Role, IAM Policy, IAM RolePolicyAttachment and the IRSA
+  `serviceAccountTemplate` annotation. This is required on any cluster that
+  has no AWS provider — without it the composition renders
+  `iam.aws.m.upbound.io` resources that cannot be composed at all.
+
+The Secret is **never created or read** by this composition — it is referenced
+by name only. Create it out of band:
+
+```bash
+kubectl create secret generic cnpg-s3-creds \
+  --namespace myapp \
+  --from-literal=ACCESS_KEY_ID=<access key> \
+  --from-literal=ACCESS_SECRET_KEY=<secret key>
+```
+
+```yaml
+  parameters:
+    identifier: myapp-db
+    masterUsername: myapp
+    databaseName: myapp
+    size: small
+    barmanBackup:
+      enabled: true
+      retentionDays: 7
+      compression: gzip
+      endpointURL: http://192.0.2.10:9000
+      credentialsSecretRef:
+        name: cnpg-s3-creds
+      # serverName defaults to '<identifier>-wal'. Bump it when re-creating a
+      # cluster into the same bucket - CNPG refuses to recover into a server
+      # whose archive is not empty ("Expected empty archive").
+      # serverName: myapp-db-wal
+      # Lower on small ARM hosts; each job is another concurrent upload.
+      maxParallel: 2
+```
+
+Other `barmanBackup` parameters:
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `endpointURL` | *(unset)* | S3-compatible endpoint. Omitted for AWS S3. |
+| `credentialsSecretRef.name` | — | Secret name. Its presence selects static-key mode. |
+| `credentialsSecretRef.accessKeyIdKey` | `ACCESS_KEY_ID` | Key holding the access key id. |
+| `credentialsSecretRef.secretAccessKeyKey` | `ACCESS_SECRET_KEY` | Key holding the secret access key. |
+| `serverName` | `<identifier>-wal` | Barman server name for ongoing WAL archiving. Must differ from the restore source name. |
+| `maxParallel` | `4` | Parallel WAL upload jobs per instance. |
+
+> **Note:** the XRD applies these defaults, so `maxParallel`, `retentionDays`
+> and `compression` take the XRD's value even though the composition also
+> carries an internal fallback.
+
 #### Verifying Barman Backup is Working
 
 ```bash
 # Check continuous archiving status
 kubectl get cluster myapp-db -n myapp -o jsonpath='{.status.conditions}' | jq '.[] | select(.type=="ContinuousArchiving")'
 
+# The archive lives at <destinationPath>/<serverName>/ - serverName defaults to
+# '<identifier>-wal', so the layout is s3://${BUCKET}/${PREFIX}/${SERVER_NAME}/
+
 # Check WAL files in S3
-aws s3 ls s3://${BUCKET}/${NAMESPACE}/${IDENTIFIER}/${IDENTIFIER}/wals/ --recursive
+aws s3 ls s3://${BUCKET}/${PREFIX}/${SERVER_NAME}/wals/ --recursive
 
 # Check base backups
-aws s3 ls s3://${BUCKET}/${NAMESPACE}/${IDENTIFIER}/${IDENTIFIER}/base/
+aws s3 ls s3://${BUCKET}/${PREFIX}/${SERVER_NAME}/base/
 
 # List available backups from barman
 kubectl exec -n myapp myapp-db-1 -- barman-cloud-backup-list \
   --cloud-provider aws-s3 \
-  s3://${BUCKET}/${NAMESPACE}/${IDENTIFIER} \
-  ${IDENTIFIER}
+  s3://${BUCKET}/${PREFIX} \
+  ${SERVER_NAME}
 ```
 
 #### Creating On-Demand Barman Backup

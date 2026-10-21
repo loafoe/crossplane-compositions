@@ -217,6 +217,34 @@ spec:
                         type: string
                         default: "0 0 0 * * *"
                         description: "Cron schedule for base backups (default: daily at midnight)."
+                      endpointURL:
+                        type: string
+                        description: "S3-compatible endpoint URL for the object store, e.g. 'http://192.0.2.10:9000' for RustFS or 'https://s3.example.com'. Omit for AWS S3. Required for any non-AWS S3-compatible store."
+                      credentialsSecretRef:
+                        type: object
+                        description: "Reference to a pre-existing Kubernetes Secret holding static S3 credentials. When set, the composition uses static access keys and does NOT create an AWS IAM Role or an IRSA service account annotation - required for non-AKS clusters and for S3-compatible stores that are not AWS S3. The Secret itself is never created or read by this composition; create it out of band."
+                        properties:
+                          name:
+                            type: string
+                            description: "Name of the secret (in the Postgres resource's namespace)."
+                          accessKeyIdKey:
+                            type: string
+                            default: "ACCESS_KEY_ID"
+                            description: "Key in the secret containing the S3 access key id."
+                          secretAccessKeyKey:
+                            type: string
+                            default: "ACCESS_SECRET_KEY"
+                            description: "Key in the secret containing the S3 secret access key."
+                        required:
+                        - name
+                      serverName:
+                        type: string
+                        description: "Barman server name used for ongoing WAL archiving, i.e. the prefix under the bucket prefix where this cluster's WALs and base backups are written. Defaults to '<identifier>-wal'. Must differ from the restore source server name, otherwise recovery fails with 'Expected empty archive'. Bump it when re-creating a cluster into the same bucket."
+                      maxParallel:
+                        type: integer
+                        default: 4
+                        minimum: 1
+                        description: "Maximum number of parallel WAL upload jobs per instance. Lower this on small/ARM hosts - each parallel job is another concurrent upload against the object store."
 
                 required:
                 - masterUsername

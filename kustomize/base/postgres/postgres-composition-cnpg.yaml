@@ -77,6 +77,11 @@ spec:
           {{- $databaseName := $xr.spec.parameters.databaseName | default "" }}
           {{- $enableSnapshots := $xr.spec.parameters.enableSnapshots | default false }}
           {{- $snapshotClassName := $xr.spec.parameters.snapshotClassName | default "default" }}
+          {{- /* Derive a stable minute (0-59) from the resource name so that volume
+                 snapshots for different databases don't all fire in the same instant
+                 by default, while staying constant across reconciles. */ -}}
+          {{- $snapshotDefaultMinute := mod (atoi (adler32sum $name)) 60 }}
+          {{- $snapshotSchedule := $xr.spec.parameters.snapshotSchedule | default (printf "0 %d 0 * * *" $snapshotDefaultMinute) }}
           {{- $storageClassName := $xr.spec.parameters.storageClassName | default "" }}
           {{- $extensions := $xr.spec.parameters.extensions | default list }}
 
@@ -404,7 +409,7 @@ spec:
               # rendered — e.g. enableSnapshots/barman disabled).
               gotemplating.fn.crossplane.io/ready: "True"
           spec:
-            schedule: "0 0 0 * * *"
+            schedule: {{ $snapshotSchedule | quote }}
             method: volumeSnapshot
             backupOwnerReference: self
             cluster:

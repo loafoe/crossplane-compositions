@@ -726,13 +726,14 @@ spec:
     databaseName: myapp
     engineVersion: "18.1"
     size: small
-    enableSnapshots: true           # Enables daily snapshots at midnight
+    enableSnapshots: true           # Enables daily snapshots
+    snapshotSchedule: "0 30 0 * * *" # Optional: cron schedule (six fields, UTC)
     snapshotClassName: default      # VolumeSnapshotClass to use
   writeConnectionSecretToRef:
     name: myapp-db-connection
 ```
 
-This creates a `ScheduledBackup` resource that runs daily at midnight using the `volumeSnapshot` method.
+This creates a `ScheduledBackup` resource that runs daily using the `volumeSnapshot` method. If `snapshotSchedule` is omitted, a stable minute between `00:00` and `00:59` UTC is derived from the resource's name, so snapshots for different databases on the same storage backend don't all fire at the same instant by default, while staying constant across reconciles.
 
 #### Creating On-Demand VolumeSnapshot Backups
 

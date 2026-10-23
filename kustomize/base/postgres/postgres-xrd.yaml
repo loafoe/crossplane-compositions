@@ -155,8 +155,12 @@ spec:
                   enableSnapshots:
                     type: boolean
                     default: false
-                    description: "Enable scheduled snapshots/backups daily at 12am."
-                  
+                    description: "Enable scheduled volumeSnapshot backups (CNPG only). The time of day is controlled by snapshotSchedule."
+
+                  snapshotSchedule:
+                    type: string
+                    description: "Cron schedule for the volumeSnapshot backup (CNPG only, ignored unless enableSnapshots is true). Six fields: seconds minutes hours day-of-month month day-of-week, evaluated in UTC by the CNPG operator. When unset, a stable minute between 00:00 and 00:59 UTC is derived from the name of this resource. Volume snapshots are copied whole by the CSI driver, so databases that share a storage backend must not all fire at the same instant; the derived default spreads them automatically and stays constant across reconciles. Set an explicit cron such as '0 30 0 * * *' to pin the time, or to keep this backup clear of another backup on the same database (e.g. barmanBackup.scheduleBaseBackup)."
+
                   snapshotClassName:
                     type: string
                     default: "default"

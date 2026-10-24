@@ -73,6 +73,10 @@ spec:
           
           {{- $dbAllocatedStorage := $xr.spec.parameters.allocatedStorage | default 20 }}
           {{- $dbStorageType := $xr.spec.parameters.storageType | default "gp3" }}
+          {{- /* Engine version. For CNPG this selects the PostgreSQL container
+                 image; when unset it follows the version shipped by the
+                 deployed operator (18.6 on operator 1.30.1). */ -}}
+          {{- $dbEngineVersion := $xr.spec.parameters.engineVersion | default "18.6" }}
           {{- $dbMultiAz := $xr.spec.parameters.multiAz | default false }}
           {{- $databaseName := $xr.spec.parameters.databaseName | default "" }}
           {{- $enableSnapshots := $xr.spec.parameters.enableSnapshots | default false }}
@@ -204,6 +208,11 @@ spec:
               crossplane.io/external-name: {{ $targetIdentifier }}
           spec:
             instances: {{ $cnpgInstances }}
+            # engineVersion maps to the CNPG PostgreSQL image. The `system`
+            # flavour is postgresql + postgresql-contrib (so extensions such as
+            # pgvector/pg_trgm are present without a custom image); `trixie`
+            # publishes both linux/amd64 and linux/arm64.
+            imageName: ghcr.io/cloudnative-pg/postgresql:{{ $dbEngineVersion }}-system-trixie
 
             {{- if and $barmanEnabled $barmanUseIAMRole }}
             # Service account with IRSA annotation for S3 access.

@@ -19,7 +19,6 @@ spec:
     masterUsername: "postgres"
     identifier: myapp-local
     databaseName: app
-    engineVersion: "18.1"
     allocatedStorage: 5
     
     # HA

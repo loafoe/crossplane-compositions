@@ -6,7 +6,6 @@ metadata:
 spec:
   parameters:
     identifier: myapp-minimal-db
-    engineVersion: "18.1"
     
     masterUsername: postgres
     

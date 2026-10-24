@@ -9,7 +9,6 @@ spec:
   parameters:
     identifier: myapp-aurora-prod
     type: aurora-cluster
-    engineVersion: "18.1"
     databaseName: myapp_data
     port: 5432
     

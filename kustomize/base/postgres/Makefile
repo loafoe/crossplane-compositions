@@ -1,4 +1,4 @@
-.PHONY: test validate render render-check render-check-no-backups test-restore-from-volumesnapshot test-barman-backup test-barman-restore test-pgvector clean help
+.PHONY: test validate render render-check render-check-no-backups test-restore-from-volumesnapshot test-barman-backup test-barman-restore test-pgvector test-engine-version clean help
 
 # Default target
 .DEFAULT_GOAL := help
@@ -15,7 +15,7 @@ help: ## Show this help message
 	@echo 'Available targets:'
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-15s %s\n", $$1, $$2}'
 
-test: validate render render-check render-check-no-backups test-restore-from-volumesnapshot test-barman-backup test-barman-s3compatible test-barman-restore test-pgvector ## Run all tests (validate + render + snapshot assertions)
+test: validate render render-check render-check-no-backups test-restore-from-volumesnapshot test-barman-backup test-barman-s3compatible test-barman-restore test-pgvector test-engine-version ## Run all tests (validate + render + snapshot assertions)
 	@echo "✅ All postgres tests passed!"
 
 validate: ## Validate the composition and XRD using crossplane beta validate
@@ -248,6 +248,45 @@ test-pgvector: ## Assert rendered output of cnpg-pgvector uses postInitApplicati
 	echo "$$OUTPUT" | grep -q "postInitSQL:" \
 		&& { echo "❌ Regression: 'postInitSQL' used instead of 'postInitApplicationSQL' - extensions would land in the postgres db, not the app db"; echo "$$OUTPUT"; exit 1; }; \
 	echo "✅ pgvector render-check passed!"
+
+test-engine-version: ## Assert engineVersion maps to the CNPG Cluster imageName, defaulting to 18.6 when omitted
+	@echo "🔍 Checking engineVersion -> spec.imageName mapping..."
+	@OUTPUT=$$(crossplane render \
+		$(BASE_DIR)examples/cnpg-minimal.yaml \
+		$(BASE_DIR)postgres-composition-cnpg.yaml \
+		$(BASE_DIR)functions-only.yaml \
+		--xrd=$(BASE_DIR)postgres-xrd.yaml \
+		--required-resources=$(BASE_DIR)test-environment-config.yaml 2>&1) || { echo "❌ Render failed"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "imageName: ghcr.io/cloudnative-pg/postgresql:18.6-system-trixie" \
+		|| { echo "❌ Expected default 'imageName: ghcr.io/cloudnative-pg/postgresql:18.6-system-trixie' when engineVersion is omitted"; echo "$$OUTPUT"; exit 1; }; \
+	OUTPUT=$$(crossplane render \
+		$(BASE_DIR)examples/cnpg-explicit-version.yaml \
+		$(BASE_DIR)postgres-composition-cnpg.yaml \
+		$(BASE_DIR)functions-only.yaml \
+		--xrd=$(BASE_DIR)postgres-xrd.yaml \
+		--required-resources=$(BASE_DIR)test-environment-config.yaml 2>&1) || { echo "❌ Render failed"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "imageName: ghcr.io/cloudnative-pg/postgresql:18.6-system-trixie" \
+		|| { echo "❌ Explicit engineVersion '18.6' did not render the expected imageName"; echo "$$OUTPUT"; exit 1; }; \
+	TMP=$$(mktemp); \
+	sed 's/engineVersion: "18.6"/engineVersion: "17.8"/' $(BASE_DIR)examples/cnpg-explicit-version.yaml > $$TMP; \
+	OUTPUT=$$(crossplane render \
+		$$TMP \
+		$(BASE_DIR)postgres-composition-cnpg.yaml \
+		$(BASE_DIR)functions-only.yaml \
+		--xrd=$(BASE_DIR)postgres-xrd.yaml \
+		--required-resources=$(BASE_DIR)test-environment-config.yaml 2>&1); RC=$$?; rm -f $$TMP; \
+	[ $$RC -eq 0 ] || { echo "❌ Render failed for engineVersion override"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "imageName: ghcr.io/cloudnative-pg/postgresql:17.8-system-trixie" \
+		|| { echo "❌ engineVersion override '17.8' did not render the expected imageName"; echo "$$OUTPUT"; exit 1; }; \
+	OUTPUT=$$(crossplane render \
+		$(BASE_DIR)examples/new-rds-instance.yaml \
+		$(BASE_DIR)postgres-composition-aws.yaml \
+		$(BASE_DIR)functions-only.yaml \
+		--xrd=$(BASE_DIR)postgres-xrd.yaml \
+		--required-resources=$(BASE_DIR)test-environment-config.yaml 2>&1) || { echo "❌ Render failed"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "engineVersion: \"18.6\"" \
+		|| { echo "❌ Expected the AWS example's explicit engineVersion '18.6' in the rendered RDS instance"; echo "$$OUTPUT"; exit 1; }; \
+	echo "✅ engineVersion render-check passed!"
 
 clean: ## Clean up any generated files
 	@echo "🧹 Cleaning up postgres test artifacts..."

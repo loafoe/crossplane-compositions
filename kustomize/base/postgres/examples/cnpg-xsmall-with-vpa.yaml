@@ -19,7 +19,6 @@ spec:
     masterUsername: "postgres"
     identifier: myapp-lightweight
     databaseName: app
-    engineVersion: "18.1"
     allocatedStorage: 5
 
     # Enable VPA in recommendation mode to track actual usage

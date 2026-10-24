@@ -16,7 +16,6 @@ spec:
     masterUsername: "postgres"
     identifier: myapp-local-snapshots
     databaseName: app
-    engineVersion: "18.1"
     allocatedStorage: 5
     multiAz: false
     enableSnapshots: true

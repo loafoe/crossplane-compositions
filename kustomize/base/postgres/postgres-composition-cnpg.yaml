@@ -208,6 +208,23 @@ spec:
               crossplane.io/external-name: {{ $targetIdentifier }}
           spec:
             instances: {{ $cnpgInstances }}
+            # Hard anti-affinity. CNPG defaults to `preferred`, under which a
+            # 3-instance HA cluster can pile two instances onto one node - and
+            # losing that node then costs quorum, which is the whole point of
+            # multiAz. `required` is only safe because any scheduling pool we
+            # target has at least one more node than a cluster has instances.
+            affinity:
+              podAntiAffinityType: required
+            # A graceful stop (SIGTERM from `kubectl delete pod`, a node drain,
+            # a kubelet restart) starts a SMART shutdown, which waits for
+            # connected clients. Idle application connection pools never
+            # disconnect, so the outgoing primary sits there answering 57P03
+            # while CNPG refuses to promote a standby (split-brain guard).
+            # Instance pods carry terminationGracePeriodSeconds: 1800, so the
+            # CNPG default of 180s stretches that to minutes of hard downtime:
+            # observed 5.5 min on monitoring/rpi-grafana, 2026-11-01. Force a
+            # fast shutdown after 30s instead.
+            smartShutdownTimeout: 30
             # engineVersion maps to the CNPG PostgreSQL image. The `system`
             # flavour is postgresql + postgresql-contrib (so extensions such as
             # pgvector/pg_trgm are present without a custom image); `trixie`

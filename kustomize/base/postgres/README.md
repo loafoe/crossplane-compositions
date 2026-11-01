@@ -221,7 +221,7 @@ spec:
 | `masterUsername` | Yes | - | Master database username |
 | `masterPasswordSecretRef` | No | - | Reference to password secret (auto-generated if not provided) |
 | `backupRetentionPeriod` | No | `7` | Backup retention days (0-35) |
-| `multiAz` | No | `false` | Enable Multi-AZ deployment |
+| `multiAz` | No | `false` | Enable Multi-AZ deployment (CNPG: 3 instances instead of 2, with hard anti-affinity) |
 | `vpa.enabled` | No | `false` | Enable VPA for automatic resource right-sizing (CNPG only) |
 | `vpa.updateMode` | No | `Off` | VPA update mode: `Off`, `Initial`, or `Auto` |
 | `extensions` | No | - | Postgres extensions to create at bootstrap, e.g. `[vector, pg_trgm]` (CNPG only) |
@@ -229,6 +229,24 @@ spec:
 **Note:** VPC configuration (subnets and security groups) is automatically extracted from the `environmentConfig` resource. The composition uses the database subnet group and database security group defined in the environment configuration.
 
 **Pinning the engine version (CNPG):** `engineVersion` is optional and defaults to `18.6`, the version shipped by the deployed operator (1.30.1). Setting it explicitly pins the PostgreSQL container image, e.g. `engineVersion: "17.8"` renders `imageName: ghcr.io/cloudnative-pg/postgresql:17.8-system-trixie`. `examples/cnpg-explicit-version.yaml` is the only example that sets this field; all other examples rely on the default.
+
+### CNPG availability defaults (not configurable from the claim)
+
+Every rendered CNPG `Cluster` now carries two settings that are deliberately not
+exposed as claim parameters, because getting them wrong is silent:
+
+| Field | Value | Why |
+|---|---|---|
+| `affinity.podAntiAffinityType` | `required` | CNPG defaults to `preferred`. Under `preferred` a 3-instance (`multiAz: true`) cluster can schedule two instances on the same node, so losing that one node costs quorum — the exact failure multiAz exists to survive. `required` holds only because target pools have more nodes than any cluster has instances. |
+| `smartShutdownTimeout` | `30` | A graceful stop (SIGTERM from `kubectl delete pod`, node drain, kubelet restart) starts a **smart** shutdown, which waits for connected clients to disconnect. Idle application connection pools never do, so the outgoing primary keeps answering new connections with `57P03` while CNPG refuses to promote a standby (split-brain guard). Instance pods carry `terminationGracePeriodSeconds: 1800`, so with the CNPG default of 180s this is minutes of hard downtime. |
+
+`multiAz: false` is still **not** HA: 2 instances means one failover leaves a single
+member and no spare. Use `multiAz: true` for anything that must stay up.
+
+Synchronous replication (`minSyncReplicas`/`maxSyncReplicas`) is intentionally left at
+CNPG's default (async) — with `minSyncReplicas: 1`, writes block whenever the synchronous
+standby is unreachable, which turns a replica outage into a write outage. Set it per
+Cluster only if the durability requirement outweighs that risk.
 
 ### T-Shirt Sizing
 

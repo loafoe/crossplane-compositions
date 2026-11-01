@@ -1,4 +1,4 @@
-.PHONY: test validate render render-check render-check-no-backups test-restore-from-volumesnapshot test-barman-backup test-barman-restore test-pgvector test-engine-version clean help
+.PHONY: test validate render render-check render-check-no-backups test-restore-from-volumesnapshot test-barman-backup test-barman-restore test-pgvector test-engine-version test-ha-topology clean help
 
 # Default target
 .DEFAULT_GOAL := help
@@ -15,7 +15,7 @@ help: ## Show this help message
 	@echo 'Available targets:'
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-15s %s\n", $$1, $$2}'
 
-test: validate render render-check render-check-no-backups test-restore-from-volumesnapshot test-barman-backup test-barman-s3compatible test-barman-restore test-pgvector test-engine-version ## Run all tests (validate + render + snapshot assertions)
+test: validate render render-check render-check-no-backups test-restore-from-volumesnapshot test-barman-backup test-barman-s3compatible test-barman-restore test-pgvector test-engine-version test-ha-topology ## Run all tests (validate + render + snapshot assertions)
 	@echo "✅ All postgres tests passed!"
 
 validate: ## Validate the composition and XRD using crossplane beta validate
@@ -287,6 +287,20 @@ test-engine-version: ## Assert engineVersion maps to the CNPG Cluster imageName,
 	echo "$$OUTPUT" | grep -q "engineVersion: \"18.6\"" \
 		|| { echo "❌ Expected the AWS example's explicit engineVersion '18.6' in the rendered RDS instance"; echo "$$OUTPUT"; exit 1; }; \
 	echo "✅ engineVersion render-check passed!"
+
+test-ha-topology: ## Assert every CNPG Cluster renders hard anti-affinity and a 30s smart shutdown timeout
+	@echo "🔍 Checking rendered CNPG topology/HA defaults..."
+	@OUTPUT=$$(crossplane render \
+		$(BASE_DIR)examples/cnpg-minimal.yaml \
+		$(BASE_DIR)postgres-composition-cnpg.yaml \
+		$(BASE_DIR)functions-only.yaml \
+		--xrd=$(BASE_DIR)postgres-xrd.yaml \
+		--required-resources=$(BASE_DIR)test-environment-config.yaml 2>&1) || { echo "❌ Render failed"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "podAntiAffinityType: required" \
+		|| { echo "❌ Expected 'podAntiAffinityType: required' - with the 'preferred' default two of three instances can share a node, and losing that node costs quorum"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "smartShutdownTimeout: 30" \
+		|| { echo "❌ Expected 'smartShutdownTimeout: 30' - the CNPG default of 180s leaves the outgoing primary answering 57P03 for minutes on a graceful stop"; echo "$$OUTPUT"; exit 1; }; \
+	echo "✅ CNPG topology/HA render-check passed!"
 
 clean: ## Clean up any generated files
 	@echo "🧹 Cleaning up postgres test artifacts..."

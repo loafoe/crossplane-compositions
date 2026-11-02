@@ -1,4 +1,4 @@
-.PHONY: test validate render render-check render-check-no-backups test-restore-from-volumesnapshot test-barman-backup test-barman-restore test-pgvector test-engine-version test-ha-topology clean help
+.PHONY: test validate render render-check render-check-no-backups test-restore-from-volumesnapshot test-barman-backup test-barman-restore test-pgvector test-engine-version test-ha-topology test-affinity-override clean help
 
 # Default target
 .DEFAULT_GOAL := help
@@ -15,7 +15,7 @@ help: ## Show this help message
 	@echo 'Available targets:'
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-15s %s\n", $$1, $$2}'
 
-test: validate render render-check render-check-no-backups test-restore-from-volumesnapshot test-barman-backup test-barman-s3compatible test-barman-restore test-pgvector test-engine-version test-ha-topology ## Run all tests (validate + render + snapshot assertions)
+test: validate render render-check render-check-no-backups test-restore-from-volumesnapshot test-barman-backup test-barman-s3compatible test-barman-restore test-pgvector test-engine-version test-ha-topology test-affinity-override ## Run all tests (validate + render + snapshot assertions)
 	@echo "✅ All postgres tests passed!"
 
 validate: ## Validate the composition and XRD using crossplane beta validate
@@ -301,6 +301,22 @@ test-ha-topology: ## Assert every CNPG Cluster renders hard anti-affinity and a 
 	echo "$$OUTPUT" | grep -q "smartShutdownTimeout: 30" \
 		|| { echo "❌ Expected 'smartShutdownTimeout: 30' - the CNPG default of 180s leaves the outgoing primary answering 57P03 for minutes on a graceful stop"; echo "$$OUTPUT"; exit 1; }; \
 	echo "✅ CNPG topology/HA render-check passed!"
+
+test-affinity-override: ## Assert parameters.affinity.podAntiAffinityType overrides the required default (and the HA timeout still applies)
+	@echo "🔍 Checking per-claim podAntiAffinityType override..."
+	@OUTPUT=$$(crossplane render \
+		$(BASE_DIR)examples/cnpg-affinity-preferred.yaml \
+		$(BASE_DIR)postgres-composition-cnpg.yaml \
+		$(BASE_DIR)functions-only.yaml \
+		--xrd=$(BASE_DIR)postgres-xrd.yaml \
+		--required-resources=$(BASE_DIR)test-environment-config.yaml 2>&1) || { echo "❌ Render failed"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "podAntiAffinityType: preferred" \
+		|| { echo "❌ Expected the claim's 'podAntiAffinityType: preferred' to reach the rendered Cluster - the override was ignored"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "instances: 2" \
+		|| { echo "❌ Expected 'instances: 2' for a non-multiAz claim"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "smartShutdownTimeout: 30" \
+		|| { echo "❌ Expected 'smartShutdownTimeout: 30' to still be rendered when affinity is overridden - the two are independent"; echo "$$OUTPUT"; exit 1; }; \
+	echo "✅ podAntiAffinityType override render-check passed!"
 
 clean: ## Clean up any generated files
 	@echo "🧹 Cleaning up postgres test artifacts..."

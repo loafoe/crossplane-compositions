@@ -1,0 +1,35 @@
+# Cluster that opts OUT of the Composition's hard pod anti-affinity
+# (default: required). Use this only when the scheduling pool genuinely cannot
+# place one instance per node (e.g. a single-node cluster), because the
+# Composition always renders 2 instances (`multiAz: false`) or 3
+# (`multiAz: true`) - so under `preferred` a single node loss can take out the
+# whole cluster instead of one member.
+apiVersion: dip.io/v1alpha1
+kind: Postgres
+metadata:
+  name: myapp-preferred-affinity-db
+  namespace: default
+spec:
+  writeConnectionSecretToRef:
+    name: myapp-preferred-affinity-db-connection
+    namespace: default
+  crossplane:
+    compositionSelector:
+      matchLabels:
+        provider: cnpg
+  parameters:
+    # Generic sizing
+    size: xsmall
+
+    # Standard configuration
+    masterUsername: "postgres"
+    identifier: myapp-preferred-affinity
+    databaseName: app
+    allocatedStorage: 5
+
+    # 2 instances (the Composition minimum)
+    multiAz: false
+
+    # Opt out of the hard anti-affinity default
+    affinity:
+      podAntiAffinityType: preferred

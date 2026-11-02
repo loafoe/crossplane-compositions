@@ -222,6 +222,7 @@ spec:
 | `masterPasswordSecretRef` | No | - | Reference to password secret (auto-generated if not provided) |
 | `backupRetentionPeriod` | No | `7` | Backup retention days (0-35) |
 | `multiAz` | No | `false` | Enable Multi-AZ deployment (CNPG: 3 instances instead of 2, with hard anti-affinity) |
+| `affinity.podAntiAffinityType` | No | `required` | CNPG pod anti-affinity: `required` or `preferred`. See "CNPG availability defaults" below before using `preferred`. |
 | `vpa.enabled` | No | `false` | Enable VPA for automatic resource right-sizing (CNPG only) |
 | `vpa.updateMode` | No | `Off` | VPA update mode: `Off`, `Initial`, or `Auto` |
 | `extensions` | No | - | Postgres extensions to create at bootstrap, e.g. `[vector, pg_trgm]` (CNPG only) |
@@ -237,7 +238,7 @@ exposed as claim parameters, because getting them wrong is silent:
 
 | Field | Value | Why |
 |---|---|---|
-| `affinity.podAntiAffinityType` | `required` | CNPG defaults to `preferred`. Under `preferred` a 3-instance (`multiAz: true`) cluster can schedule two instances on the same node, so losing that one node costs quorum — the exact failure multiAz exists to survive. `required` holds only because target pools have more nodes than any cluster has instances. |
+| `affinity.podAntiAffinityType` | `required` | CNPG defaults to `preferred`. Under `preferred` a 3-instance (`multiAz: true`) cluster can schedule two instances on the same node, so losing that one node costs quorum — the exact failure multiAz exists to survive. `required` holds only because target pools have more nodes than any cluster has instances. Overridable per claim via `parameters.affinity.podAntiAffinityType` (see `examples/cnpg-affinity-preferred.yaml`) for pools that genuinely cannot spread; the Composition always renders 2 or 3 instances, so `preferred` means one node can take the whole cluster. |
 | `smartShutdownTimeout` | `30` | A graceful stop (SIGTERM from `kubectl delete pod`, node drain, kubelet restart) starts a **smart** shutdown, which waits for connected clients to disconnect. Idle application connection pools never do, so the outgoing primary keeps answering new connections with `57P03` while CNPG refuses to promote a standby (split-brain guard). Instance pods carry `terminationGracePeriodSeconds: 1800`, so with the CNPG default of 180s this is minutes of hard downtime. |
 
 `multiAz: false` is still **not** HA: 2 instances means one failover leaves a single

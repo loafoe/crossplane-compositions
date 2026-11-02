@@ -134,6 +134,17 @@ spec:
                     default: false
                     description: "Enable High Availability (Multi-AZ for AWS, Replicas for CNPG)"
                   
+                  # CNPG scheduling / affinity (CNPG provider only)
+                  affinity:
+                    type: object
+                    description: "Pod affinity for CNPG instances. Omit to use the Composition default (podAntiAffinityType: required)."
+                    properties:
+                      podAntiAffinityType:
+                        type: string
+                        enum: ["preferred", "required"]
+                        default: "required"
+                        description: "CNPG spec.affinity.podAntiAffinityType. `required` (default) forbids two instances of one cluster on the same node; `preferred` allows it, so a single node loss can take out the whole cluster. Only for scheduling pools that cannot spread instances; never combined with multiAz: true."
+                  
                   # Restore configuration
                   restore:
                     type: object

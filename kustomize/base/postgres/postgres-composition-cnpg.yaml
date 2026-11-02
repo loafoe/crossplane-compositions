@@ -195,6 +195,20 @@ spec:
           {{- if $dbMultiAz }}
             {{- $cnpgInstances = 3 }}
           {{- end }}
+
+          {{- /* CNPG anti-affinity. Defaults to `required`: under CNPG's own
+                 `preferred` default a 3-instance HA cluster can pile two
+                 instances onto one node, and losing that node then costs
+                 quorum - the exact failure multiAz is bought to survive.
+                 `required` is only safe because any scheduling pool we target
+                 has at least one more node than a cluster has instances.
+                 Overridable per claim via parameters.affinity, for pools that
+                 genuinely cannot place one instance per node - with the 2-or-3
+                 instance minimum the whole cluster can then land on one node. */ -}}
+          {{- $cnpgPodAntiAffinityType := "required" }}
+          {{- if $xr.spec.parameters.affinity }}
+            {{- $cnpgPodAntiAffinityType = $xr.spec.parameters.affinity.podAntiAffinityType | default "required" }}
+          {{- end }}
           
           ---
           apiVersion: postgresql.cnpg.io/v1
@@ -208,13 +222,10 @@ spec:
               crossplane.io/external-name: {{ $targetIdentifier }}
           spec:
             instances: {{ $cnpgInstances }}
-            # Hard anti-affinity. CNPG defaults to `preferred`, under which a
-            # 3-instance HA cluster can pile two instances onto one node - and
-            # losing that node then costs quorum, which is the whole point of
-            # multiAz. `required` is only safe because any scheduling pool we
-            # target has at least one more node than a cluster has instances.
+            # See $cnpgPodAntiAffinityType above: `required` by default,
+            # overridable per claim with parameters.affinity.podAntiAffinityType.
             affinity:
-              podAntiAffinityType: required
+              podAntiAffinityType: {{ $cnpgPodAntiAffinityType }}
             # A graceful stop (SIGTERM from `kubectl delete pod`, a node drain,
             # a kubelet restart) starts a SMART shutdown, which waits for
             # connected clients. Idle application connection pools never

@@ -74,9 +74,13 @@ spec:
           {{- $dbAllocatedStorage := $xr.spec.parameters.allocatedStorage | default 20 }}
           {{- $dbStorageType := $xr.spec.parameters.storageType | default "gp3" }}
           {{- /* Engine version. For CNPG this selects the PostgreSQL container
-                 image; when unset it follows the version shipped by the
-                 deployed operator (18.6 on operator 1.30.1). */ -}}
-          {{- $dbEngineVersion := $xr.spec.parameters.engineVersion | default "18.6" }}
+                 image. Pinned to 18.7 (2026-11-14): CNPG operator 1.30.1 still
+                 ships 18.6 as its operand default, and the operator's mutating
+                 webhook writes that default into every Cluster's
+                 spec.imageName at admission - so "follow the operator" would
+                 silently keep every new Cluster on 18.6. Bump this in the same
+                 change as the operand the operator ships. */ -}}
+          {{- $dbEngineVersion := $xr.spec.parameters.engineVersion | default "18.7" }}
           {{- $dbMultiAz := $xr.spec.parameters.multiAz | default false }}
           {{- $databaseName := $xr.spec.parameters.databaseName | default "" }}
           {{- $enableSnapshots := $xr.spec.parameters.enableSnapshots | default false }}

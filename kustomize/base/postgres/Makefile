@@ -249,7 +249,7 @@ test-pgvector: ## Assert rendered output of cnpg-pgvector uses postInitApplicati
 		&& { echo "❌ Regression: 'postInitSQL' used instead of 'postInitApplicationSQL' - extensions would land in the postgres db, not the app db"; echo "$$OUTPUT"; exit 1; }; \
 	echo "✅ pgvector render-check passed!"
 
-test-engine-version: ## Assert engineVersion maps to the CNPG Cluster imageName, defaulting to 18.6 when omitted
+test-engine-version: ## Assert engineVersion maps to the CNPG Cluster imageName, defaulting to 18.7 when omitted
 	@echo "🔍 Checking engineVersion -> spec.imageName mapping..."
 	@OUTPUT=$$(crossplane render \
 		$(BASE_DIR)examples/cnpg-minimal.yaml \
@@ -257,8 +257,8 @@ test-engine-version: ## Assert engineVersion maps to the CNPG Cluster imageName,
 		$(BASE_DIR)functions-only.yaml \
 		--xrd=$(BASE_DIR)postgres-xrd.yaml \
 		--required-resources=$(BASE_DIR)test-environment-config.yaml 2>&1) || { echo "❌ Render failed"; echo "$$OUTPUT"; exit 1; }; \
-	echo "$$OUTPUT" | grep -q "imageName: ghcr.io/cloudnative-pg/postgresql:18.6-system-trixie" \
-		|| { echo "❌ Expected default 'imageName: ghcr.io/cloudnative-pg/postgresql:18.6-system-trixie' when engineVersion is omitted"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "imageName: ghcr.io/cloudnative-pg/postgresql:18.7-system-trixie" \
+		|| { echo "❌ Expected default 'imageName: ghcr.io/cloudnative-pg/postgresql:18.7-system-trixie' when engineVersion is omitted"; echo "$$OUTPUT"; exit 1; }; \
 	OUTPUT=$$(crossplane render \
 		$(BASE_DIR)examples/cnpg-explicit-version.yaml \
 		$(BASE_DIR)postgres-composition-cnpg.yaml \

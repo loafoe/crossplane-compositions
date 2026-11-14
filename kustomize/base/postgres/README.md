@@ -215,7 +215,7 @@ spec:
 | `identifier` | Yes | - | Name of the database resource |
 | `provider` | No | `aws` | Backend provider: `aws` or `cnpg` |
 | `size` | No | `small` | T-shirt size: `xsmall`, `small`, `medium`, `large` |
-| `engineVersion` | No | `18.6` (CNPG) | PostgreSQL engine version (e.g., '18.6', '17.8'), 17.x or higher. For CNPG it maps to `ghcr.io/cloudnative-pg/postgresql:<version>-system-trixie` and defaults to `18.6` when unset. For AWS it is the RDS/Aurora engine version and the provider default is used when unset. |
+| `engineVersion` | No | `18.7` (CNPG) | PostgreSQL engine version (e.g., '18.7', '17.8'), 17.x or higher. For CNPG it maps to `ghcr.io/cloudnative-pg/postgresql:<version>-system-trixie` and defaults to `18.7` when unset. For AWS it is the RDS/Aurora engine version and the provider default is used when unset. |
 | `allocatedStorage` | Yes | - | Storage in GB (minimum 20 for AWS, 5 for CNPG) |
 | `storageType` | No | `gp3` | Storage type: gp2, gp3, io1 |
 | `masterUsername` | Yes | - | Master database username |
@@ -229,7 +229,7 @@ spec:
 
 **Note:** VPC configuration (subnets and security groups) is automatically extracted from the `environmentConfig` resource. The composition uses the database subnet group and database security group defined in the environment configuration.
 
-**Pinning the engine version (CNPG):** `engineVersion` is optional and defaults to `18.6`, the version shipped by the deployed operator (1.30.1). Setting it explicitly pins the PostgreSQL container image, e.g. `engineVersion: "17.8"` renders `imageName: ghcr.io/cloudnative-pg/postgresql:17.8-system-trixie`. `examples/cnpg-explicit-version.yaml` is the only example that sets this field; all other examples rely on the default.
+**Pinning the engine version (CNPG):** `engineVersion` is optional and defaults to `18.7`. That default is **pinned deliberately** rather than inherited from the operator: CNPG operator 1.30.1 still ships PostgreSQL 18.6 as its operand default, and its mutating webhook writes that default into every `Cluster.spec.imageName` at admission time — so a Cluster created without an explicit `engineVersion` would be frozen on 18.6 no matter what the operator does later. Bump the default in `postgres-composition-cnpg.yaml` together with the operand the operator ships. Setting `engineVersion` explicitly pins the image, e.g. `engineVersion: "17.8"` renders `imageName: ghcr.io/cloudnative-pg/postgresql:17.8-system-trixie`. `examples/cnpg-explicit-version.yaml` is the only example that sets this field; all other examples rely on the default.
 
 ### CNPG availability defaults (not configurable from the claim)
 
@@ -743,7 +743,7 @@ spec:
     identifier: myapp-db
     masterUsername: myapp
     databaseName: myapp
-    engineVersion: "18.6"
+    engineVersion: "18.7"
     size: small
     enableSnapshots: true           # Enables daily snapshots
     snapshotSchedule: "0 30 0 * * *" # Optional: cron schedule (six fields, UTC)

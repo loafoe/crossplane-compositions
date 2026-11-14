@@ -233,13 +233,14 @@ spec:
 
 ### CNPG availability defaults (not configurable from the claim)
 
-Every rendered CNPG `Cluster` now carries two settings that are deliberately not
+Every rendered CNPG `Cluster` now carries three settings that are deliberately not
 exposed as claim parameters, because getting them wrong is silent:
 
 | Field | Value | Why |
 |---|---|---|
 | `affinity.podAntiAffinityType` | `required` | CNPG defaults to `preferred`. Under `preferred` a 3-instance (`multiAz: true`) cluster can schedule two instances on the same node, so losing that one node costs quorum — the exact failure multiAz exists to survive. `required` holds only because target pools have more nodes than any cluster has instances. Overridable per claim via `parameters.affinity.podAntiAffinityType` (see `examples/cnpg-affinity-preferred.yaml`) for pools that genuinely cannot spread; the Composition always renders 2 or 3 instances, so `preferred` means one node can take the whole cluster. |
 | `smartShutdownTimeout` | `30` | A graceful stop (SIGTERM from `kubectl delete pod`, node drain, kubelet restart) starts a **smart** shutdown, which waits for connected clients to disconnect. Idle application connection pools never do, so the outgoing primary keeps answering new connections with `57P03` while CNPG refuses to promote a standby (split-brain guard). Instance pods carry `terminationGracePeriodSeconds: 1800`, so with the CNPG default of 180s this is minutes of hard downtime. |
+| `primaryUpdateMethod` | `switchover` | A rolling update (new image, e.g. a ClusterImageCatalog minor bump) ends on the primary. CNPG's default `restart` restarts it in place, so there is no writable primary through the whole shutdown and startup (~2m45s observed on 2026-11-14, 18.6 → 18.7, on clusters that restarted in place). `switchover` promotes the most aligned replica after a `CHECKPOINT` + **fast** shutdown of the old primary: seconds. Always possible here, since the Composition renders 2 or 3 instances. Side effect: CNPG rejects a single update that changes both the image and `postgresql.parameters`; change them in separate steps. |
 
 `multiAz: false` is still **not** HA: 2 instances means one failover leaves a single
 member and no spare. Use `multiAz: true` for anything that must stay up.

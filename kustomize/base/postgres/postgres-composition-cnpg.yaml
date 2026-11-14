@@ -236,6 +236,17 @@ spec:
             # observed 5.5 min on monitoring/rpi-grafana, 2026-11-01. Force a
             # fast shutdown after 30s instead.
             smartShutdownTimeout: 30
+            # A rolling update (new image, e.g. a ClusterImageCatalog minor
+            # bump) ends on the primary. The CNPG default, `restart`, restarts
+            # it in place, so there is no writable primary through the whole
+            # shutdown + startup (~2m45s observed on 2026-11-14, 18.6 -> 18.7,
+            # on clusters that restarted in place). `switchover` promotes the
+            # most aligned replica after a CHECKPOINT + FAST shutdown of the
+            # old primary: seconds. Always possible here, the Composition
+            # renders 2 or 3 instances. Side effect: CNPG rejects one update
+            # that changes both the image and postgresql.parameters; change
+            # them in separate steps.
+            primaryUpdateMethod: switchover
             # engineVersion maps to the CNPG PostgreSQL image. The `system`
             # flavour is postgresql + postgresql-contrib (so extensions such as
             # pgvector/pg_trgm are present without a custom image); `trixie`

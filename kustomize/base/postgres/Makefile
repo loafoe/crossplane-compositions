@@ -300,6 +300,8 @@ test-ha-topology: ## Assert every CNPG Cluster renders hard anti-affinity and a 
 		|| { echo "❌ Expected 'podAntiAffinityType: required' - with the 'preferred' default two of three instances can share a node, and losing that node costs quorum"; echo "$$OUTPUT"; exit 1; }; \
 	echo "$$OUTPUT" | grep -q "smartShutdownTimeout: 30" \
 		|| { echo "❌ Expected 'smartShutdownTimeout: 30' - the CNPG default of 180s leaves the outgoing primary answering 57P03 for minutes on a graceful stop"; echo "$$OUTPUT"; exit 1; }; \
+	echo "$$OUTPUT" | grep -q "primaryUpdateMethod: switchover" \
+		|| { echo "❌ Expected 'primaryUpdateMethod: switchover' - the CNPG default 'restart' leaves the cluster without a writable primary for the whole in-place restart on every rolling update"; echo "$$OUTPUT"; exit 1; }; \
 	echo "✅ CNPG topology/HA render-check passed!"
 
 test-affinity-override: ## Assert parameters.affinity.podAntiAffinityType overrides the required default (and the HA timeout still applies)

@@ -185,6 +185,14 @@ spec:
             {{- $cnpgCpuReq = "25m" }}
             {{- $cnpgMemReq = "64Mi" }}
             {{- $cnpgMemLim = "256Mi" }}
+          {{- else if eq $size "xlarge" }}
+            {{- /* Despite the t-shirt name, this is a 2Gi-limit tier sized
+                   between small and large - not actually "extra large".
+                   Named to keep the enum's t-shirt-size naming convention
+                   rather than add an out-of-pattern literal like "2gi". */ -}}
+            {{- $cnpgCpuReq = "100m" }}
+            {{- $cnpgMemReq = "512Mi" }}
+            {{- $cnpgMemLim = "2Gi" }}
           {{- else if eq $size "medium" }}
             {{- $cnpgCpuReq = "250m" }}
             {{- $cnpgMemReq = "1Gi" }}

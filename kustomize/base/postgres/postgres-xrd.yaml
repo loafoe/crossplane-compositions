@@ -49,9 +49,9 @@ spec:
                   # T-Shirt Sizing abstraction
                   size:
                     type: string
-                    enum: ["xsmall", "small", "medium", "large", "xlarge"]
+                    enum: ["xsmall", "small", "2gi", "medium", "large"]
                     default: "small"
-                    description: "Instance sizing abstraction. xsmall (25m/64Mi req, 256Mi lim), small (50m/128Mi req, 1Gi lim), medium (250m/1Gi req, 4Gi lim), large (1/4Gi req, 16Gi lim), xlarge (100m/512Mi req, 2Gi lim - CNPG only; NOTE: despite the name this sits between small and medium, not above large - named to keep the t-shirt-size naming trend, not relative memory size). Overridden by instanceClass if set."
+                    description: "Instance sizing abstraction. xsmall (25m/64Mi req, 256Mi lim), small (50m/128Mi req, 1Gi lim), 2gi (100m/512Mi req, 2Gi lim - CNPG only, between small and medium), medium (250m/1Gi req, 4Gi lim), large (1/4Gi req, 16Gi lim). Overridden by instanceClass if set."
 
                   # Identifier for creating new database
                   identifier:

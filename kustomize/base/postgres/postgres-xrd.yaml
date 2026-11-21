@@ -134,6 +134,12 @@ spec:
                     default: false
                     description: "Enable High Availability (Multi-AZ for AWS, Replicas for CNPG)"
                   
+                  # WAL retention on the primary (CNPG provider only)
+                  walKeepSize:
+                    type: string
+                    default: "2GB"
+                    description: "CNPG spec.postgresql.parameters.wal_keep_size — how much WAL the primary retains locally regardless of archiving/replication. Raised from the CNPG operator default (512MB) after a 2026-11-21 incident where failover-stranded replicas on rpi ran out of retained/archived WAL to catch up on and looped forever retrying restore_command, pegging CPU. Larger values trade local disk (local-path, node SSD) for a bigger safety margin during a failover; does not fully prevent a stranded replica (archive gaps/timeline-segment-reuse collisions can still occur), see rpi k3s repo skills/postgres-cnpg/SKILL.md."
+
                   # CNPG scheduling / affinity (CNPG provider only)
                   affinity:
                     type: object

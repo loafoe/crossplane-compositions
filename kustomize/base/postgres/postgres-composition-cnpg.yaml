@@ -90,6 +90,7 @@ spec:
                  by default, while staying constant across reconciles. */ -}}
           {{- $snapshotDefaultMinute := mod (atoi (adler32sum $name)) 60 }}
           {{- $snapshotSchedule := $xr.spec.parameters.snapshotSchedule | default (printf "0 %d 0 * * *" $snapshotDefaultMinute) }}
+          {{- $walKeepSize := $xr.spec.parameters.walKeepSize | default "2GB" }}
           {{- $storageClassName := $xr.spec.parameters.storageClassName | default "" }}
           {{- $extensions := $xr.spec.parameters.extensions | default list }}
 
@@ -350,6 +351,11 @@ spec:
             {{- end }}
 
             enableSuperuserAccess: true
+
+            # WAL retention on the primary — see walKeepSize in the XRD for why
+            postgresql:
+              parameters:
+                wal_keep_size: {{ $walKeepSize }}
 
             # Storage configuration
             storage:

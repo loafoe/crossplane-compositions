@@ -1,0 +1,46 @@
+name: Renovate
+
+# Keeps the pinned image tags in kustomize/base/*/functions.yaml current. The
+# `# renovate:` hints and the customManager that reads them live in
+# renovate.json; until this file existed nothing ran Renovate here, so every
+# provider sat at v2.2.0 while the fleet moved to v2.10.0.
+#
+# Uses the workflow's own GITHUB_TOKEN rather than a PAT (unlike
+# k8s-aws-bootstrap, which needs one so its Renovate PRs trigger the other
+# workflows). This repo has no other workflows to trigger, so the built-in
+# token is enough and there is no secret to provision. Consequence: PRs here
+# are authored by github-actions[bot] and their pushes do not start CI.
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/renovate.yaml'
+      - 'renovate.json'
+  schedule:
+    - cron: '0 2,14 * * *'
+  workflow_dispatch:
+
+env:
+  # renovate: datasource=npm depName=renovate
+  RENOVATE_VERSION: '44.256.1'
+
+jobs:
+  renovate:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Self-hosted Renovate
+        uses: renovatebot/github-action@v43.0.16
+        with:
+          renovate-version: ${{ env.RENOVATE_VERSION }}
+          token: '${{ secrets.GITHUB_TOKEN }}'
+          configurationFile: 'renovate.json'
+        env:
+          RENOVATE_REPOSITORIES: ${{ github.repository }}
+          LOG_LEVEL: 'info'

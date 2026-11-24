@@ -38,7 +38,7 @@ metadata:
   name: provider-aws-rds
 spec:
   # renovate: datasource=docker depName=ghcr.io/crossplane-contrib/provider-aws-rds
-  package: ghcr.io/crossplane-contrib/provider-aws-rds:v2.2.0
+  package: ghcr.io/crossplane-contrib/provider-aws-rds:v2.10.0
 ---
 # AWS Provider for IAM resources
 apiVersion: pkg.crossplane.io/v1

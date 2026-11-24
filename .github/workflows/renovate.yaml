@@ -10,6 +10,12 @@ name: Renovate
 # workflows). This repo has no other workflows to trigger, so the built-in
 # token is enough and there is no secret to provision. Consequence: PRs here
 # are authored by github-actions[bot] and their pushes do not start CI.
+#
+# That needs the repository setting Actions -> General -> "Allow GitHub
+# Actions to create and approve pull requests" (API:
+# can_approve_pull_request_reviews). Without it Renovate pushes its branches
+# and then silently creates no PRs -- no error anywhere, just seven orphan
+# renovate/* branches. Enabled 2026-11-24.
 on:
   pull_request:
     paths:
@@ -30,6 +36,8 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      # For the Dependency Dashboard issue that config:recommended keeps.
+      issues: write
 
     steps:
       - name: Checkout

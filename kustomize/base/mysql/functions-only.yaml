@@ -13,7 +13,7 @@ metadata:
   name: function-go-templating
 spec:
   # renovate: datasource=docker depName=ghcr.io/crossplane-contrib/function-go-templating
-  package: ghcr.io/crossplane-contrib/function-go-templating:v0.13.0
+  package: ghcr.io/crossplane-contrib/function-go-templating:v0.13.2
 ---
 apiVersion: pkg.crossplane.io/v1beta1
 kind: Function

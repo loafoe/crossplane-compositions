@@ -5,7 +5,7 @@ metadata:
   name: function-environment-configs
 spec:
   # renovate: datasource=docker depName=ghcr.io/crossplane-contrib/function-environment-configs
-  package: ghcr.io/crossplane-contrib/function-environment-configs:v0.9.1
+  package: ghcr.io/crossplane-contrib/function-environment-configs:v0.9.2
 ---
 apiVersion: pkg.crossplane.io/v1beta1
 kind: Function

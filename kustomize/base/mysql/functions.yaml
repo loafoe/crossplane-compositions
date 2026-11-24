@@ -47,4 +47,4 @@ metadata:
   name: provider-aws-iam
 spec:
   # renovate: datasource=docker depName=ghcr.io/crossplane-contrib/provider-aws-iam
-  package: ghcr.io/crossplane-contrib/provider-aws-iam:v2.2.0
+  package: ghcr.io/crossplane-contrib/provider-aws-iam:v2.10.0

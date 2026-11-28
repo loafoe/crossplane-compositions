@@ -29,7 +29,7 @@ metadata:
   name: function-auto-ready
 spec:
   # renovate: datasource=docker depName=ghcr.io/crossplane-contrib/function-auto-ready
-  package: ghcr.io/crossplane-contrib/function-auto-ready:v0.7.4
+  package: ghcr.io/crossplane-contrib/function-auto-ready:v0.7.5
 ---
 # AWS Provider for RDS resources
 apiVersion: pkg.crossplane.io/v1
